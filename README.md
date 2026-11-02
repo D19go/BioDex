@@ -60,7 +60,7 @@ Hoje o escopo é o **Rio Grande do Sul** (bioma Pampa), com um catálogo de demo
 
 ## Contato
 
-**Diogo da Silva Costa** — LinkedIn: _[adicionar link]_
+**Diogo da Silva Costa** — LinkedIn: [linkedin.com/in/diogo-da-silva-costa](https://www.linkedin.com/in/diogo-da-silva-costa)
 
 ---
 
@@ -126,4 +126,4 @@ Today the scope is **Rio Grande do Sul, Brazil** (Pampa biome), with a demo cata
 
 ## Contact
 
-**Diogo da Silva Costa** — LinkedIn: _[add link]_
+**Diogo da Silva Costa** — LinkedIn: [linkedin.com/in/diogo-da-silva-costa](https://www.linkedin.com/in/diogo-da-silva-costa)
