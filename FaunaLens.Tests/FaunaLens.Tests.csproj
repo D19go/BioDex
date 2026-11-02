@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>FaunaLens.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <!-- Código do app que não depende do Android: é compilado aqui para poder rodar em qualquer máquina. -->
+  <ItemGroup>
+    <Compile Include="..\FaunaLens\Models\*.cs" Link="Shared\Models\%(Filename)%(Extension)" />
+    <Compile Include="..\FaunaLens\Services\FaunaPackReader.cs" Link="Shared\FaunaPackReader.cs" />
+    <Compile Include="..\FaunaLens\Services\ResultFormatter.cs" Link="Shared\ResultFormatter.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\FaunaLens\Data\Pampa.faunapack" Link="Pampa.faunapack" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
