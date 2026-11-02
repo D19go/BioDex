@@ -50,6 +50,10 @@ public sealed class FaunaPackReader
             ?? throw new InvalidDataException("species.json está vazio ou inválido.");
 
         if (entries.Count == 0) throw new InvalidDataException("O FaunaPack não possui espécies.");
+
+        // Pacotes gerados por versões antigas do Builder não gravavam a contagem no manifesto.
+        if (manifest.SpeciesCount == 0) manifest.SpeciesCount = entries.Count;
+        if (manifest.SpeciesCount < 1 || manifest.SpeciesCount > MaxSpecies) throw new InvalidDataException("A quantidade de espécies do pack não é suportada.");
         if (entries.Count != manifest.SpeciesCount) throw new InvalidDataException("A quantidade de espécies não coincide com o manifesto.");
 
         foreach (var entry in entries)
@@ -156,7 +160,6 @@ public sealed class FaunaPackReader
         if (manifest.FormatVersion != ExpectedVersion) throw new InvalidDataException($"Versão de FaunaPack não suportada: {manifest.FormatVersion}.");
         if (manifest.EmbeddingDimension != ExpectedDimension) throw new InvalidDataException("O FaunaPack não usa embeddings BioCLIP v1 de 512 dimensões.");
         if (manifest.ReferencesPerSpecies < 1 || manifest.ReferencesPerSpecies > MaxReferencesPerSpecies) throw new InvalidDataException("A quantidade de referências por espécie não é suportada.");
-        if (manifest.SpeciesCount < 1 || manifest.SpeciesCount > MaxSpecies) throw new InvalidDataException("A quantidade de espécies do pack não é suportada.");
         if (!string.Equals(manifest.EmbeddingFile, "embeddings.bin", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Arquivo de embeddings não suportado pelo formato atual.");
         if (!string.Equals(manifest.ImageFolder, "images", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Pasta de imagens não suportada pelo formato atual.");
         if (!manifest.EmbeddingModel.Contains("BioCLIP", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("O modelo de embeddings do pack não é compatível com este Fauna Lens.");
