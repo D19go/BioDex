@@ -21,6 +21,7 @@ public sealed class MainActivity : Activity
     const int ModelRequest = 4103;
     const int GalleryRequest = 4104;
     const int PackRequest = 4105;
+    const int NotificationPermissionRequest = 4106;
 
     ImageView? preview;
     TextView? status;
@@ -35,20 +36,65 @@ public sealed class MainActivity : Activity
     readonly FaunaPackManager packManager = new();
     BioClipOnnxEngine? engine;
     FaunaPackData? installedPack;
+    Handler? uiHandler;
+    Bitmap? previewBitmap;
+    bool pollingDownload;
+    bool engineLoading;
+    bool engineLoadFailed;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+        uiHandler = new Handler(Looper.MainLooper!);
         BuildUi();
-        LoadCatalogOrInstalledPack();
+        _ = StartupAsync();
+    }
+
+    async Task StartupAsync()
+    {
+        status!.Text = "Carregando catálogo de espécies...";
+        await LoadCatalogOrInstalledPackAsync();
         RecoverBackgroundDownload();
-        _ = InitializeEngineAsync();
+        await InitializeEngineAsync();
+        StartDownloadPolling();
     }
 
     protected override void OnResume()
     {
         base.OnResume();
         RefreshDownloadState();
+        StartDownloadPolling();
+    }
+
+    protected override void OnPause()
+    {
+        base.OnPause();
+        pollingDownload = false;
+    }
+
+    // Consulta o estado gravado pelo serviço de download enquanto a tela está aberta,
+    // para mostrar o progresso e carregar o modelo assim que ele terminar de baixar.
+    void StartDownloadPolling()
+    {
+        if (pollingDownload)
+            return;
+
+        pollingDownload = true;
+        uiHandler?.PostDelayed(PollDownload, 1000);
+    }
+
+    void PollDownload()
+    {
+        if (!pollingDownload)
+            return;
+
+        RefreshDownloadState();
+
+        var state = BioClipDownloadState.Load();
+        if (state.Status is "downloading" or "resuming")
+            uiHandler?.PostDelayed(PollDownload, 1000);
+        else
+            pollingDownload = false;
     }
 
     void RecoverBackgroundDownload()
@@ -70,21 +116,30 @@ public sealed class MainActivity : Activity
 
     async Task InitializeEngineAsync()
     {
+        if (engineLoading)
+            return;
+
+        engineLoading = true;
         try
         {
-            status!.Text = "Carregando BioCLIP offline...";
             var modelPath = FileSystem.ModelPath;
-            var ready = await Task.Run(() => File.Exists(modelPath));
-            if (ready)
+            if (File.Exists(modelPath))
             {
+                status!.Text = "Carregando BioCLIP offline...";
                 var newEngine = await Task.Run(() => new BioClipOnnxEngine(modelPath));
                 engine?.Dispose();
                 engine = newEngine;
+                engineLoadFailed = false;
             }
         }
         catch (Exception ex)
         {
+            engineLoadFailed = true;
             result!.Text = $"Não foi possível carregar o BioCLIP offline: {ex.Message}";
+        }
+        finally
+        {
+            engineLoading = false;
         }
 
         RefreshDownloadState();
@@ -99,11 +154,19 @@ public sealed class MainActivity : Activity
             downloadModelButton!.Enabled = false;
             status!.Text = state.TotalBytes > 0
                 ? $"Baixando BioCLIP offline... {state.Percent}%"
-                : "Baixando BioCLIP offline... preparando...";
+                : "Conectando ao servidor de download... pode levar alguns segundos.";
             return;
         }
 
         downloadModelButton!.Enabled = true;
+
+        // O download terminou em segundo plano: carrega o modelo sem exigir reiniciar o app.
+        if (engine?.IsReady != true && !engineLoading && !engineLoadFailed && File.Exists(FileSystem.ModelPath))
+        {
+            _ = InitializeEngineAsync();
+            return;
+        }
+
         if (state.Status == "paused" || state.Status == "interrupted")
         {
             status!.Text = File.Exists(FileSystem.ModelTempPath)
@@ -114,10 +177,21 @@ public sealed class MainActivity : Activity
         }
     }
 
+    void RequestNotificationPermissionIfNeeded()
+    {
+        if (Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu)
+            return;
+
+        const string permission = "android.permission.POST_NOTIFICATIONS";
+        if (CheckSelfPermission(permission) != Permission.Granted)
+            RequestPermissions(new[] { permission }, NotificationPermissionRequest);
+    }
+
     void BuildUi()
     {
         var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
         root.SetPadding(32, 24, 32, 24);
+        root.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(32, 24));
 
         var scroll = new ScrollView(this);
         var content = new LinearLayout(this) { Orientation = Orientation.Vertical };
@@ -142,7 +216,7 @@ public sealed class MainActivity : Activity
 
         preview = new ImageView(this);
         preview.SetBackgroundColor(Color.Rgb(238, 238, 238));
-        preview.SetScaleType(ImageView.ScaleType.CenterCrop);
+        preview.SetScaleType(ImageView.ScaleType.FitCenter);
         content.AddView(preview, new LinearLayout.LayoutParams(-1, Dp(300)));
 
         var camera = new Button(this) { Text = "Tirar foto" };
@@ -193,7 +267,7 @@ public sealed class MainActivity : Activity
         SetContentView(root);
     }
 
-    void LoadCatalogOrInstalledPack()
+    async Task LoadCatalogOrInstalledPackAsync()
     {
         try
         {
@@ -217,10 +291,22 @@ public sealed class MainActivity : Activity
                     .FirstOrDefault();
             }
 
+            FaunaPackData? pack;
             if (!string.IsNullOrWhiteSpace(selectedDirectory))
             {
-                installedPack = packManager.LoadAsync(selectedDirectory).GetAwaiter().GetResult();
-                catalog.LoadPack(installedPack);
+                var directory = selectedDirectory;
+                pack = await Task.Run(() => packManager.LoadAsync(directory).GetAwaiter().GetResult());
+            }
+            else
+            {
+                // Primeira abertura: instala o pacote de demonstração que acompanha o APK.
+                pack = await InstallBundledPackAsync();
+            }
+
+            if (pack is not null)
+            {
+                installedPack = pack;
+                catalog.LoadPack(pack);
                 return;
             }
         }
@@ -231,6 +317,28 @@ public sealed class MainActivity : Activity
 
         using var stream = Assets!.Open("Data/pampa_species_offline.json");
         catalog.Load(stream, "Pampa — demonstração");
+    }
+
+    async Task<FaunaPackData?> InstallBundledPackAsync()
+    {
+        var temporaryPath = System.IO.Path.Combine(FileSystem.Root, $"bundled_{Guid.NewGuid():N}.install");
+        try
+        {
+            using (var input = Assets!.Open("Data/Pampa.faunapack"))
+            using (var output = File.Create(temporaryPath))
+                await input.CopyToAsync(output);
+
+            return await Task.Run(() => packManager.InstallAsync(temporaryPath).GetAwaiter().GetResult());
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
     }
 
     void UpdateEngineStatus()
@@ -299,8 +407,11 @@ public sealed class MainActivity : Activity
 
         try
         {
+            engineLoadFailed = false;
+            RequestNotificationPermissionIfNeeded();
             StartBioClipDownloadService();
             downloadModelButton!.Enabled = false;
+            StartDownloadPolling();
             await Task.Delay(250);
             RefreshDownloadState();
         }
@@ -492,12 +603,11 @@ public sealed class MainActivity : Activity
 
     void LoadImageFromFile(string path, string sourceText)
     {
-        using var bitmap = BitmapFactory.DecodeFile(path);
-        if (bitmap is null)
-            throw new InvalidOperationException("Não foi possível abrir a imagem selecionada.");
-
-        var displayBitmap = bitmap.Copy(Bitmap.Config.Argb8888, false);
+        var displayBitmap = ImageLoader.Load(path, 1024);
         preview!.SetImageBitmap(displayBitmap);
+        previewBitmap?.Recycle();
+        previewBitmap?.Dispose();
+        previewBitmap = displayBitmap;
         pendingPath = path;
         identifyButton!.Enabled = true;
         status!.Text = engine?.IsReady == true
@@ -511,15 +621,21 @@ public sealed class MainActivity : Activity
         Directory.CreateDirectory(FileSystem.PhotoDirectory);
         var path = System.IO.Path.Combine(FileSystem.PhotoDirectory, $"gallery_{DateTime.UtcNow:yyyyMMdd_HHmmssfff}.jpg");
 
-        using var input = ContentResolver!.OpenInputStream(uri)
-            ?? throw new InvalidOperationException("Não foi possível abrir a imagem selecionada.");
-        using var bitmap = BitmapFactory.DecodeStream(input)
-            ?? throw new InvalidOperationException("O arquivo selecionado não é uma imagem suportada.");
-        using var output = File.Create(path);
-        if (!bitmap.Compress(Bitmap.CompressFormat.Jpeg, 95, output))
-            throw new InvalidOperationException("Não foi possível preparar a imagem para análise.");
+        using (var input = ContentResolver!.OpenInputStream(uri)
+            ?? throw new InvalidOperationException("Não foi possível abrir a imagem selecionada."))
+        using (var output = File.Create(path))
+            input.CopyTo(output);
 
-        LoadImageFromFile(path, "Imagem da galeria");
+        try
+        {
+            LoadImageFromFile(path, "Imagem da galeria");
+        }
+        catch
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+            throw;
+        }
     }
 
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
@@ -656,6 +772,11 @@ public sealed class MainActivity : Activity
 
     protected override void OnDestroy()
     {
+        pollingDownload = false;
+        engine?.Dispose();
+        engine = null;
+        previewBitmap?.Dispose();
+        previewBitmap = null;
         base.OnDestroy();
     }
 }

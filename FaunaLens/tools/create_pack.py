@@ -11,11 +11,11 @@ Estrutura:
 
 Uso:
   python create_pack.py --model bioclip --references ..\references\pampa \
-      --catalog ..\Data\pampa_species_base.json \
+      --catalog ..\Data\pampa_species.json \
       --output ..\Data\pampa_species_offline.json
 
   python create_pack.py --model bioclip2 --references ..\references\pampa \
-      --catalog ..\Data\pampa_species_base.json \
+      --catalog ..\Data\pampa_species.json \
       --output ..\Server\data\pampa_species_online.json
 """
 import argparse

@@ -59,11 +59,20 @@ public sealed class BioClipDownloadForegroundService : Service
             Broadcast(state);
 
             var downloader = new BioClipDownloadService();
+            var lastReport = DateTime.MinValue;
             await downloader.DownloadAsync(
                 ModelConfiguration.BioClipOnnxUrl,
                 FileSystem.ModelPath,
                 (downloaded, total) =>
                 {
+                    // Gravar o estado e atualizar a notificação a cada bloco de 128 KB é excessivo;
+                    // limita a uma atualização por segundo (e sempre no final).
+                    var now = DateTime.UtcNow;
+                    var finished = total > 0 && downloaded >= total;
+                    if (!finished && now - lastReport < TimeSpan.FromSeconds(1))
+                        return;
+                    lastReport = now;
+
                     var current = BioClipDownloadState.Load();
                     current.Status = "downloading";
                     current.DownloadedBytes = downloaded;

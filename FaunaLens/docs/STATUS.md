@@ -21,3 +21,18 @@
 - [x] Modelo final instalado somente após validação ONNX.
 - [x] Fechamento da Activity não cancela o download.
 - [ ] Teste final em aparelho físico com app fechado durante o download.
+
+## 0.6.2 — correções da primeira revisão (não compiladas nem testadas em aparelho)
+- [x] O modelo é carregado automaticamente quando o download termina (sem reiniciar o app) e o progresso aparece ao vivo.
+- [x] O pacote de demonstração Pampa.faunapack acompanha o APK e é instalado na primeira abertura.
+- [x] Fotos são abertas reduzidas e com a rotação EXIF corrigida (menos risco de falta de memória).
+- [x] A galeria copia o arquivo original em vez de recomprimir em tamanho cheio.
+- [x] O catálogo/pacote é carregado fora da thread da tela.
+- [x] Resultado de baixa confiança vira "não reconheci" (limiar inicial 0.60, a calibrar).
+- [x] Campos vazios da ficha deixam de aparecer.
+- [x] Permissão POST_NOTIFICATIONS; `allowBackup` e tráfego sem TLS desativados.
+- [x] Atualizações do download limitadas a uma por segundo.
+- [x] Servidor não cai sem catálogo; docs apontam para `pampa_species.json`.
+- [ ] Compilar e testar em aparelho físico.
+- [ ] Calibrar o limiar de confiança com fotos reais.
+- [ ] Comparar o embedding do Android com o do Python (paridade do pré-processamento).

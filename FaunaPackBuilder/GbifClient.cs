@@ -199,18 +199,30 @@ public sealed class GbifClient : IDisposable
         try
         {
             var data = await GetJsonAsync<GbifVernacularResponse>(
-                $"{ApiRoot}/species/{key}/vernacularNames", ct);
+                $"{ApiRoot}/species/{key}/vernacularNames?limit=200", ct);
 
-            var pt = data?.Results.FirstOrDefault(x =>
-                string.Equals(x.Language, "por", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(x.Language, "pt", StringComparison.OrdinalIgnoreCase));
-
-            return pt?.VernacularName ?? data?.Results.FirstOrDefault()?.VernacularName;
+            return PickVernacularName(data?.Results);
         }
         catch
         {
             return null;
         }
+    }
+
+    // Prefere português; na falta dele, inglês. Nunca usa um idioma arbitrário (já apareceu
+    // um nome em turco): sem nome em pt/en o catálogo usa o nome científico.
+    internal static string? PickVernacularName(IEnumerable<GbifVernacularName>? names)
+    {
+        if (names is null)
+            return null;
+
+        var list = names.Where(x => !string.IsNullOrWhiteSpace(x.VernacularName)).ToList();
+
+        static bool Is(GbifVernacularName x, params string[] codes) =>
+            codes.Any(c => string.Equals(x.Language, c, StringComparison.OrdinalIgnoreCase));
+
+        return list.FirstOrDefault(x => Is(x, "por", "pt"))?.VernacularName
+            ?? list.FirstOrDefault(x => Is(x, "eng", "en"))?.VernacularName;
     }
 
     async Task<T?> GetJsonAsync<T>(string url, CancellationToken ct)

@@ -23,8 +23,7 @@ public sealed class BioClipOnnxEngine : IDisposable
         if (session is null)
             throw new InvalidOperationException("Modelo BioCLIP offline não encontrado.");
 
-        using var source = BitmapFactory.DecodeFile(imagePath)
-            ?? throw new InvalidOperationException("Não foi possível abrir a foto.");
+        using var source = ImageLoader.Load(imagePath, ImageSize * 4);
 
         var input = Preprocess(source);
         var inputName = session.InputMetadata.Keys.First();
