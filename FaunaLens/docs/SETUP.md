@@ -19,7 +19,7 @@ Os modelos oficiais são:
 - `imageomics/bioclip` — BioCLIP original, ViT-B/16.
 - `imageomics/bioclip-2` — BioCLIP 2, ViT-L/14.
 
-Os autores documentam o uso de ambos com OpenCLIP. citeturn0search4turn0search1
+Os autores documentam o uso de ambos com OpenCLIP.
 
 Entre em `tools`:
 

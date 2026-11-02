@@ -40,7 +40,7 @@ O pacote é validado antes de ser ativado. Arquivos com caminhos inválidos, est
 ## Build
 
 ```powershell
-cd "C:\Users\Gabriel\Desktop\BioDex\FaunaLens"
+cd FaunaLens
 Remove-Item -Recurse -Force bin,obj -ErrorAction SilentlyContinue
 dotnet restore
 dotnet build -c Release
