@@ -24,7 +24,7 @@ Prepare um catálogo usando BioCLIP 2:
 python ..\tools\create_pack.py `
   --model bioclip2 `
   --references ..\references\pampa `
-  --catalog ..\Data\pampa_species_base.json `
+  --catalog ..\Data\pampa_species.json `
   --output .\data\pampa_species_online.json
 ```
 

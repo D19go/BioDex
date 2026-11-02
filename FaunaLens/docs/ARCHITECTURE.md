@@ -53,7 +53,7 @@ ou um cache local equivalente. O aplicativo só envia a fotografia quando o usu�
 A mesma base de espécies é transformada em dois catálogos porque os embeddings precisam ser produzidos pelo mesmo modelo usado para consultar.
 
 ```text
-Data/pampa_species_base.json
+Data/pampa_species.json
              |
        +-----+-----+
        |           |

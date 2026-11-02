@@ -6,7 +6,7 @@
     <RootNamespace>FaunaLens</RootNamespace>
     <ApplicationId>com.dsc.faunalens</ApplicationId>
     <ApplicationTitle>Fauna Lens</ApplicationTitle>
-    <ApplicationDisplayVersion>0.6.1</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>0.6.2</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -26,5 +26,6 @@
     <AndroidResource Include="Resources\drawable\ic_launcher.xml" />
     <AndroidAsset Include="Data\pampa_species.json" />
     <AndroidAsset Include="Data\pampa_species_offline.json" />
+    <AndroidAsset Include="Data\Pampa.faunapack" />
   </ItemGroup>
 </Project>

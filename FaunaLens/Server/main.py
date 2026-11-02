@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import open_clip
 import torch
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
 
 MODEL_ID = os.environ.get("FAUNA_MODEL", "hf-hub:imageomics/bioclip-2")
@@ -17,7 +17,7 @@ app = FastAPI(title="Fauna Lens API", version="0.2.0")
 model, _, preprocess = open_clip.create_model_and_transforms(MODEL_ID)
 model.eval()
 
-catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+catalog = json.loads(CATALOG.read_text(encoding="utf-8")) if CATALOG.exists() else []
 
 
 def normalize(vector):
@@ -45,6 +45,8 @@ def health():
 
 @app.post("/identify")
 async def identify(image: UploadFile = File(...)):
+    if not catalog:
+        raise HTTPException(status_code=503, detail=f"Catálogo online não encontrado: {CATALOG}")
     query = image_embedding(await image.read())
     ranked = []
 
