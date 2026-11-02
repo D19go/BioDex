@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>FaunaLens</RootNamespace>
+    <ApplicationId>com.dsc.faunalens</ApplicationId>
+    <ApplicationTitle>Fauna Lens</ApplicationTitle>
+    <ApplicationDisplayVersion>0.6.1</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <AndroidUseAapt2>true</AndroidUseAapt2>
+    <TrimMode>partial</TrimMode>
+    <AndroidFastDeployment>false</AndroidFastDeployment>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
+    <PackageReference Include="Xamarin.AndroidX.Core" Version="1.19.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AndroidResource Include="Resources\xml\file_paths.xml" />
+    <AndroidResource Include="Resources\drawable\ic_launcher.xml" />
+    <AndroidAsset Include="Data\pampa_species.json" />
+    <AndroidAsset Include="Data\pampa_species_offline.json" />
+  </ItemGroup>
+</Project>

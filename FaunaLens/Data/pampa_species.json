@@ -1,0 +1,7 @@
+[
+  {"id":"capybara","commonName":"Capivara","scientificName":"Hydrochoerus hydrochaeris","height":"50–65 cm","weight":"35–65 kg","diet":"Herbívora","habitat":"Áreas próximas a rios, banhados e lagoas","curiosities":"É o maior roedor vivente conhecido."},
+  {"id":"maned_wolf","commonName":"Lobo-guará","scientificName":"Chrysocyon brachyurus","height":"90–115 cm no ombro","weight":"20–30 kg","diet":"Onívora, com forte consumo de frutos","habitat":"Campos e áreas abertas","curiosities":"Suas pernas longas ajudam a deslocar-se pela vegetação alta."},
+  {"id":"marsh_deer","commonName":"Cervo-do-pantanal","scientificName":"Blastocerus dichotomus","height":"100–120 cm no ombro","weight":"80–150 kg","diet":"Herbívora","habitat":"Banhados, áreas alagadas e margens de rios","curiosities":"É o maior cervídeo da América do Sul."},
+  {"id":"pampas_cat","commonName":"Gato-dos-pampas","scientificName":"Leopardus colocola","height":"cerca de 30–35 cm no ombro","weight":"2–5 kg","diet":"Carnívora","habitat":"Campos e áreas abertas","curiosities":"É um pequeno felino adaptado a ambientes campestres."},
+  {"id":"southern_crested_caracara","commonName":"Caracará","scientificName":"Caracara plancus","height":"cerca de 50–60 cm","weight":"0,9–1,3 kg","diet":"Onívora e oportunista","habitat":"Campos, áreas abertas e ambientes rurais","curiosities":"Pode aproveitar carcaças e também capturar pequenos animais."}
+]

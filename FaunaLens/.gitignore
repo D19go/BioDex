@@ -1,0 +1,13 @@
+.vs/
+.idea/
+bin/
+obj/
+tools/.venv/
+Server/.venv/
+Models/exported/*.onnx
+Models/exported/*.bin
+Models/exported/*.safetensors
+Models/bioclip/
+Models/bioclip2/
+references/
+*.user

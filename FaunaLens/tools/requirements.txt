@@ -1,0 +1,8 @@
+open_clip_torch>=3.2
+huggingface_hub>=0.30
+torch>=2.6
+torchvision>=0.21
+Pillow>=10
+numpy>=1.26
+onnx>=1.17
+onnxruntime>=1.20
