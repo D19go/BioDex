@@ -154,7 +154,7 @@ public sealed class MainActivity : Activity
             downloadModelButton!.Enabled = false;
             status!.Text = state.TotalBytes > 0
                 ? $"Baixando BioCLIP offline... {state.Percent}%"
-                : "Baixando BioCLIP offline... preparando...";
+                : "Conectando ao servidor de download... pode levar alguns segundos.";
             return;
         }
 
@@ -191,6 +191,7 @@ public sealed class MainActivity : Activity
     {
         var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
         root.SetPadding(32, 24, 32, 24);
+        root.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(32, 24));
 
         var scroll = new ScrollView(this);
         var content = new LinearLayout(this) { Orientation = Orientation.Vertical };
@@ -215,7 +216,7 @@ public sealed class MainActivity : Activity
 
         preview = new ImageView(this);
         preview.SetBackgroundColor(Color.Rgb(238, 238, 238));
-        preview.SetScaleType(ImageView.ScaleType.CenterCrop);
+        preview.SetScaleType(ImageView.ScaleType.FitCenter);
         content.AddView(preview, new LinearLayout.LayoutParams(-1, Dp(300)));
 
         var camera = new Button(this) { Text = "Tirar foto" };
