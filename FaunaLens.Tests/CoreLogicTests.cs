@@ -103,3 +103,38 @@ public sealed class CoreLogicTests : IDisposable
             () => new FaunaPackReader().InstallAsync(malicious, destination));
     }
 }
+
+public sealed class BuilderNameTests
+{
+    static FaunaPackBuilder.GbifVernacularName N(string? language, string? name) =>
+        new() { Language = language, VernacularName = name };
+
+    [Fact]
+    public void PrefersPortugueseOverEnglishAndOthers()
+    {
+        var names = new[] { N("tur", "Büyük Orman Kılavuzu"), N("eng", "Slaty-breasted Wood Rail"), N("por", "Saracura-três-potes") };
+        Assert.Equal("Saracura-três-potes", FaunaPackBuilder.GbifClient.PickVernacularName(names));
+    }
+
+    [Fact]
+    public void FallsBackToEnglishWhenNoPortuguese()
+    {
+        var names = new[] { N("tur", "Büyük Orman Kılavuzu"), N("eng", "Giant Wood Rail") };
+        Assert.Equal("Giant Wood Rail", FaunaPackBuilder.GbifClient.PickVernacularName(names));
+    }
+
+    [Fact]
+    public void NeverUsesAnArbitraryLanguage()
+    {
+        var names = new[] { N("tur", "Büyük Orman Kılavuzu"), N(null, "Alita azul") };
+        Assert.Null(FaunaPackBuilder.GbifClient.PickVernacularName(names));
+        Assert.Null(FaunaPackBuilder.GbifClient.PickVernacularName(null));
+    }
+
+    [Fact]
+    public void IgnoresEmptyNames()
+    {
+        var names = new[] { N("por", "  "), N("pt", "Capivara") };
+        Assert.Equal("Capivara", FaunaPackBuilder.GbifClient.PickVernacularName(names));
+    }
+}

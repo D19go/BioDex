@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   testes:
     name: Testes da lógica (xUnit)
@@ -64,3 +67,28 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m py_compile FaunaLens/Server/main.py FaunaLens/tools/*.py
+
+  release:
+    name: Publicar APK na aba Releases
+    needs: [testes, android, builder, python]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: biodex-apk
+          path: apk
+      - name: Criar/atualizar a release "ultima-versao"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          APK=$(ls apk/*.apk | head -n 1)
+          cp "$APK" BioDex-debug.apk
+          gh release delete ultima-versao --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create ultima-versao BioDex-debug.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "BioDex (build automático)" \
+            --notes "APK gerado automaticamente a partir do commit $GITHUB_SHA (branch $GITHUB_REF_NAME). Só é publicado depois que os testes e as compilações passam. É um build de teste: instale e use por sua conta e risco."
