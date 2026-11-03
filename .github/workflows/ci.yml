@@ -83,7 +83,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          APK=$(ls apk/*.apk | head -n 1)
+          echo "APKs gerados:"; ls -la apk
+          # O build gera um APK sem assinatura (não instala) e outro "-Signed": publica o assinado.
+          APK=$(ls apk/*-Signed.apk 2>/dev/null | head -n 1 || true)
+          if [ -z "$APK" ]; then APK=$(ls apk/*.apk | head -n 1); fi
+          echo "Publicando: $APK"
+          APKSIGNER=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | tail -n 1 || true)
+          if [ -n "$APKSIGNER" ]; then
+            echo "Verificando assinatura com $APKSIGNER"
+            "$APKSIGNER" verify --verbose --print-certs "$APK"
+          else
+            echo "apksigner não encontrado; assinatura não verificada"
+          fi
           cp "$APK" BioDex-debug.apk
           gh release delete ultima-versao --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
           gh release create ultima-versao BioDex-debug.apk \
