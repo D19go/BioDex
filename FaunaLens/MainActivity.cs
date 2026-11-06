@@ -393,6 +393,15 @@ public sealed class MainActivity : Activity
             return;
         }
 
+        if (!ModelStorage.HasAccess(this))
+        {
+            status!.Text = "Libere o acesso a arquivos para salvar o BioCLIP em Download/Biodex_Models. Depois toque em \"Baixar BioCLIP offline\" de novo.";
+            ModelStorage.RequestAccess(this);
+            return;
+        }
+
+        await Task.Run(ModelStorage.MigrateLegacyModels);
+
         var state = BioClipDownloadState.Load();
         if (state.Status is "downloading" or "resuming")
         {
@@ -436,6 +445,13 @@ public sealed class MainActivity : Activity
 
     void PickModel()
     {
+        if (!ModelStorage.HasAccess(this))
+        {
+            status!.Text = "Libere o acesso a arquivos para importar o modelo em Download/Biodex_Models.";
+            ModelStorage.RequestAccess(this);
+            return;
+        }
+
         var intent = new Intent(Intent.ActionOpenDocument);
         intent.AddCategory(Intent.CategoryOpenable);
         intent.SetType("application/octet-stream");

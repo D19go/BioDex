@@ -18,6 +18,7 @@
     <Compile Include="..\FaunaLens\Models\*.cs" Link="Shared\Models\%(Filename)%(Extension)" />
     <Compile Include="..\FaunaLens\Services\FaunaPackReader.cs" Link="Shared\FaunaPackReader.cs" />
     <Compile Include="..\FaunaLens\Services\ResultFormatter.cs" Link="Shared\ResultFormatter.cs" />
+    <Compile Include="..\FaunaLens\Services\ModelLocation.cs" Link="Shared\ModelLocation.cs" />
     <Compile Include="..\FaunaPackBuilder\GbifClient.cs" Link="Shared\Builder\GbifClient.cs" />
     <Compile Include="..\FaunaPackBuilder\Models.cs" Link="Shared\Builder\Models.cs" />
   </ItemGroup>
