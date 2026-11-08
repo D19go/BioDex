@@ -22,6 +22,7 @@ public sealed class MainActivity : Activity
     const int GalleryRequest = 4104;
     const int PackRequest = 4105;
     const int NotificationPermissionRequest = 4106;
+    const int PackBuilderRequest = 4108;
 
     ImageView? preview;
     TextView? status;
@@ -240,6 +241,10 @@ public sealed class MainActivity : Activity
         managePackButton.Click += async (_, _) => await ShowPackManagerAsync();
         content.AddView(managePackButton);
 
+        var createPackButton = new Button(this) { Text = "🧭 Criar FaunaPack por região" };
+        createPackButton.Click += (_, _) => StartPackBuilder();
+        content.AddView(createPackButton);
+
         downloadModelButton = new Button(this) { Text = "Baixar BioCLIP offline" };
         downloadModelButton.Click += async (_, _) => await DownloadModelAsync();
         content.AddView(downloadModelButton);
@@ -393,6 +398,15 @@ public sealed class MainActivity : Activity
             return;
         }
 
+        if (!ModelStorage.HasAccess(this))
+        {
+            status!.Text = "Libere o acesso a arquivos para salvar o BioCLIP em Download/Biodex_Models. Depois toque em \"Baixar BioCLIP offline\" de novo.";
+            ModelStorage.RequestAccess(this);
+            return;
+        }
+
+        await Task.Run(ModelStorage.MigrateLegacyModels);
+
         var state = BioClipDownloadState.Load();
         if (state.Status is "downloading" or "resuming")
         {
@@ -434,8 +448,34 @@ public sealed class MainActivity : Activity
             StartService(intent);
     }
 
+    void StartPackBuilder()
+    {
+        // A tela de packs carrega o próprio BioCLIP. Libera o desta tela para não manter dois na memória.
+        engine?.Dispose();
+        engine = null;
+        StartActivityForResult(new Intent(this, typeof(PackBuilderActivity)), PackBuilderRequest);
+    }
+
+    async Task ReloadAfterPackBuilderAsync()
+    {
+        await LoadCatalogOrInstalledPackAsync();
+        if (File.Exists(FileSystem.ModelPath))
+            await InitializeEngineAsync();
+        result!.Text = installedPack is null
+            ? "O pack foi criado, mas não foi possível carregá-lo."
+            : "FaunaPack criado e ativado.";
+        UpdateEngineStatus();
+    }
+
     void PickModel()
     {
+        if (!ModelStorage.HasAccess(this))
+        {
+            status!.Text = "Libere o acesso a arquivos para importar o modelo em Download/Biodex_Models.";
+            ModelStorage.RequestAccess(this);
+            return;
+        }
+
         var intent = new Intent(Intent.ActionOpenDocument);
         intent.AddCategory(Intent.CategoryOpenable);
         intent.SetType("application/octet-stream");
@@ -643,6 +683,12 @@ public sealed class MainActivity : Activity
         base.OnActivityResult(requestCode, resultCode, data);
         if (resultCode != Result.Ok)
             return;
+
+        if (requestCode == PackBuilderRequest)
+        {
+            _ = ReloadAfterPackBuilderAsync();
+            return;
+        }
 
         if (requestCode == ModelRequest && data?.Data is not null)
         {

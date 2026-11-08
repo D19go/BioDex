@@ -32,7 +32,7 @@ public sealed class BioClipDownloadState
 
     public static void Save(BioClipDownloadState state)
     {
-        Directory.CreateDirectory(FileSystem.ModelDirectory);
+        Directory.CreateDirectory(FileSystem.PrivateModelStateDirectory);
         var temporaryPath = FileSystem.ModelDownloadStatePath + ".tmp";
         var options = new JsonSerializerOptions
         {

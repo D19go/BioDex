@@ -505,16 +505,7 @@ public sealed class MainForm : Form
         return result.References.Count == requestedImages ? result : null;
     }
 
-    bool IsAllowedLicense(string? license)
-    {
-        if (string.IsNullOrWhiteSpace(license)) return false;
-        var value = license.Trim().ToLowerInvariant();
-
-        if (value.Contains("publicdomain/zero") || value.Contains("cc0")) return true;
-        if (value.Contains("creativecommons.org/licenses/by/")) return true;
-        if (allowBySa.Checked && value.Contains("creativecommons.org/licenses/by-sa/")) return true;
-        return false;
-    }
+    bool IsAllowedLicense(string? license) => GbifLicense.IsAllowed(license, allowBySa.Checked);
 
     static async Task<List<SpeciesInput>> LoadCatalogAsync(string path, CancellationToken ct)
     {

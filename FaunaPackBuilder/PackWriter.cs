@@ -19,7 +19,8 @@ public static class PackWriter
         string outputPath,
         string packName,
         IReadOnlyList<PackSpecies> species,
-        string tempDirectory)
+        string tempDirectory,
+        string? packIdOverride = null)
     {
         var referencesPerSpecies = species.Count == 0 ? 0 : species[0].References.Count;
         if (referencesPerSpecies < 1)
@@ -28,7 +29,7 @@ public static class PackWriter
         if (species.Any(x => x.References.Count != referencesPerSpecies || x.Embeddings.Count != referencesPerSpecies))
             throw new InvalidOperationException("Todas as espécies precisam ter a mesma quantidade de imagens e embeddings.");
 
-        var packId = Slug(packName);
+        var packId = packIdOverride ?? Slug(packName);
         var manifest = new PackManifest
         {
             PackId = packId,

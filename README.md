@@ -8,7 +8,7 @@ Aplicativo Android que identifica animais a partir de fotos usando inteligência
 
 ## Baixar o APK
 
-O APK de teste mais recente fica na aba **[Releases](https://github.com/D19go/BioDex/releases/tag/ultima-versao)** (arquivo `BioDex-debug.apk`). Ele é gerado automaticamente e só é publicado depois que os testes e as compilações passam. Para instalar, permita a instalação de apps de fontes desconhecidas no Android. Na primeira abertura, toque em "Baixar BioCLIP offline" (o modelo tem algumas centenas de MB; use Wi-Fi).
+O APK de teste mais recente fica na aba **[Releases](https://github.com/D19go/BioDex/releases/tag/ultima-versao)** (arquivo `BioDex-debug.apk`). Ele é gerado automaticamente e só é publicado depois que os testes e as compilações passam. Para instalar, permita a instalação de apps de fontes desconhecidas no Android. Na primeira abertura, toque em "Baixar BioCLIP offline" (o modelo tem algumas centenas de MB; use Wi-Fi). O modelo é salvo em `Download/Biodex_Models`, então continua no celular mesmo se o app for desinstalado. Para apagá-lo, basta excluir essa pasta.
 
 ## Para quem é
 
@@ -78,7 +78,7 @@ An Android app that identifies animals from photos using AI, designed for hikers
 
 ## Download the APK
 
-The latest test APK is on the **[Releases](https://github.com/D19go/BioDex/releases/tag/ultima-versao)** tab (`BioDex-debug.apk`). It is built automatically and only published after tests and builds pass. To install it, allow installing apps from unknown sources on Android. On first launch, tap "Baixar BioCLIP offline" (the model is a few hundred MB; use Wi-Fi).
+The latest test APK is on the **[Releases](https://github.com/D19go/BioDex/releases/tag/ultima-versao)** tab (`BioDex-debug.apk`). It is built automatically and only published after tests and builds pass. To install it, allow installing apps from unknown sources on Android. On first launch, tap "Baixar BioCLIP offline" (the model is a few hundred MB; use Wi-Fi). The model is saved in `Download/Biodex_Models`, so it stays on the phone even if the app is uninstalled. To delete it, just remove that folder.
 
 ## Who it's for
 
