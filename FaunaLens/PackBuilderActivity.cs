@@ -184,7 +184,8 @@ public sealed class PackBuilderActivity : Activity
             AppendLog($"Pack \"{pack.Manifest.PackName}\" criado com {pack.Entries.Count} espécies e ativado. Toque em voltar para identificar com ele.");
             SetResult(Result.Ok);
         }
-        catch (OperationCanceledException)
+        // System.OperationCanceledException explícito: Android.OS também define um tipo com esse nome.
+        catch (System.OperationCanceledException)
         {
             AppendLog("Operação cancelada.");
         }
