@@ -21,6 +21,8 @@
     <Compile Include="..\FaunaLens\Services\ModelLocation.cs" Link="Shared\ModelLocation.cs" />
     <Compile Include="..\FaunaPackBuilder\GbifClient.cs" Link="Shared\Builder\GbifClient.cs" />
     <Compile Include="..\FaunaPackBuilder\Models.cs" Link="Shared\Builder\Models.cs" />
+    <Compile Include="..\FaunaPackBuilder\PackWriter.cs" Link="Shared\Builder\PackWriter.cs" />
+    <Compile Include="..\FaunaPackBuilder\GbifLicense.cs" Link="Shared\Builder\GbifLicense.cs" />
   </ItemGroup>
 
   <ItemGroup>
