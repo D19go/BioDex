@@ -22,6 +22,12 @@ public sealed class SpeciesCatalog
         SourceName = sourceName;
     }
 
+    public void Clear()
+    {
+        species.Clear();
+        SourceName = "";
+    }
+
     // FaunaPackData pertence ao mesmo namespace Models.
     public void LoadPack(FaunaPackData pack)
     {

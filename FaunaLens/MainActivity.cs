@@ -22,7 +22,6 @@ public sealed class MainActivity : Activity
     const int GalleryRequest = 4104;
     const int PackRequest = 4105;
     const int NotificationPermissionRequest = 4106;
-    const int PackBuilderRequest = 4108;
 
     ImageView? preview;
     TextView? status;
@@ -65,6 +64,7 @@ public sealed class MainActivity : Activity
         base.OnResume();
         RefreshDownloadState();
         StartDownloadPolling();
+        CheckPackBuildResult();
     }
 
     protected override void OnPause()
@@ -162,7 +162,8 @@ public sealed class MainActivity : Activity
         downloadModelButton!.Enabled = true;
 
         // O download terminou em segundo plano: carrega o modelo sem exigir reiniciar o app.
-        if (engine?.IsReady != true && !engineLoading && !engineLoadFailed && File.Exists(FileSystem.ModelPath))
+        if (engine?.IsReady != true && !engineLoading && !engineLoadFailed && File.Exists(FileSystem.ModelPath)
+            && !PackBuildStateStore.Load(FileSystem.PackBuildStatePath).IsActive(DateTime.UtcNow))
         {
             _ = InitializeEngineAsync();
             return;
@@ -296,53 +297,23 @@ public sealed class MainActivity : Activity
                     .FirstOrDefault();
             }
 
-            FaunaPackData? pack;
-            if (!string.IsNullOrWhiteSpace(selectedDirectory))
+            // Sem FaunaPack, o app começa vazio: não há demonstração embutida no APK.
+            if (string.IsNullOrWhiteSpace(selectedDirectory))
             {
-                var directory = selectedDirectory;
-                pack = await Task.Run(() => packManager.LoadAsync(directory).GetAwaiter().GetResult());
-            }
-            else
-            {
-                // Primeira abertura: instala o pacote de demonstração que acompanha o APK.
-                pack = await InstallBundledPackAsync();
-            }
-
-            if (pack is not null)
-            {
-                installedPack = pack;
-                catalog.LoadPack(pack);
+                installedPack = null;
+                catalog.Clear();
                 return;
             }
+
+            var directory = selectedDirectory;
+            var pack = await Task.Run(() => packManager.LoadAsync(directory).GetAwaiter().GetResult());
+            installedPack = pack;
+            catalog.LoadPack(pack);
         }
         catch
         {
             installedPack = null;
-        }
-
-        using var stream = Assets!.Open("Data/pampa_species_offline.json");
-        catalog.Load(stream, "Pampa — demonstração");
-    }
-
-    async Task<FaunaPackData?> InstallBundledPackAsync()
-    {
-        var temporaryPath = System.IO.Path.Combine(FileSystem.Root, $"bundled_{Guid.NewGuid():N}.install");
-        try
-        {
-            using (var input = Assets!.Open("Data/Pampa.faunapack"))
-            using (var output = File.Create(temporaryPath))
-                await input.CopyToAsync(output);
-
-            return await Task.Run(() => packManager.InstallAsync(temporaryPath).GetAwaiter().GetResult());
-        }
-        catch
-        {
-            return null;
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
+            catalog.Clear();
         }
     }
 
@@ -353,7 +324,7 @@ public sealed class MainActivity : Activity
             : "BioCLIP offline não instalado. Toque em “Baixar BioCLIP offline”.";
 
         var packStatus = installedPack is null
-            ? $"Catálogo: {catalog.SourceName} ({catalog.Count} espécies)."
+            ? "Nenhum FaunaPack ativo. Crie um em “Criar FaunaPack por região” ou importe um .faunapack."
             : $"FaunaPack ativo: {installedPack.Manifest.PackName} ({catalog.Count} espécies; {installedPack.Manifest.ReferencesPerSpecies} referência(s)/espécie).";
 
         status!.Text = modelStatus + "\n" + packStatus;
@@ -450,20 +421,52 @@ public sealed class MainActivity : Activity
 
     void StartPackBuilder()
     {
-        // A tela de packs carrega o próprio BioCLIP. Libera o desta tela para não manter dois na memória.
+        // A criação roda em segundo plano e carrega o próprio BioCLIP. Libera o desta tela para não manter dois na memória.
         engine?.Dispose();
         engine = null;
-        StartActivityForResult(new Intent(this, typeof(PackBuilderActivity)), PackBuilderRequest);
+        StartActivity(new Intent(this, typeof(PackBuilderActivity)));
     }
 
-    async Task ReloadAfterPackBuilderAsync()
+    void StartPackUpdate(InstalledFaunaPack pack)
+    {
+        if (PackBuildStateStore.Load(FileSystem.PackBuildStatePath).IsActive(DateTime.UtcNow))
+        {
+            result!.Text = "Já existe um FaunaPack sendo criado. Aguarde terminar ou cancele pela tela de criação.";
+            return;
+        }
+
+        engine?.Dispose();
+        engine = null;
+        var intent = new Intent(this, typeof(PackBuilderActivity));
+        intent.PutExtra(PackBuilderActivity.ExtraUpdatePackDirectory, pack.DirectoryPath);
+        StartActivity(intent);
+    }
+
+    // Mostra uma única vez o resultado de uma criação feita em segundo plano e recarrega o pack, se foi criado.
+    void CheckPackBuildResult()
+    {
+        var state = PackBuildStateStore.Load(FileSystem.PackBuildStatePath);
+        if (state.Acknowledged || !state.IsFinished)
+            return;
+
+        PackBuildStateStore.Acknowledge(FileSystem.PackBuildStatePath);
+        if (state.Status == "completed")
+        {
+            result!.Text = $"FaunaPack \"{state.PackName}\" pronto: {state.ResultSpeciesCount} espécies.";
+            _ = ReloadPackAsync();
+            return;
+        }
+
+        result!.Text = state.Status == "failed"
+            ? $"A criação do FaunaPack falhou: {state.Error}"
+            : "Criação do FaunaPack cancelada.";
+    }
+
+    async Task ReloadPackAsync()
     {
         await LoadCatalogOrInstalledPackAsync();
         if (File.Exists(FileSystem.ModelPath))
             await InitializeEngineAsync();
-        result!.Text = installedPack is null
-            ? "O pack foi criado, mas não foi possível carregá-lo."
-            : "FaunaPack criado e ativado.";
         UpdateEngineStatus();
     }
 
@@ -595,19 +598,31 @@ public sealed class MainActivity : Activity
 
         var activeId = packManager.GetActivePackId();
         var labels = packs
-            .Select(x => x.PackName + (x.PackId == activeId ? "  ✓ ativo" : ""))
+            .Select(x => $"{x.PackName} · {x.SpeciesCount} espécies × {x.ReferencesPerSpecies} imagens" + (x.PackId == activeId ? "  ✓ ativo" : ""))
             .ToArray();
 
         var dialog = new AlertDialog.Builder(this)
             .SetTitle("FaunaPacks instalados")
-            .SetItems(labels, async (_, args) =>
-            {
-                await SelectPackAsync(packs[args.Which]);
-            })
+            .SetItems(labels, (_, args) => ShowPackActions(packs[args.Which]))
             .SetNegativeButton("Fechar", (_, _) => { })
             .Create();
 
         dialog.Show();
+    }
+
+    void ShowPackActions(InstalledFaunaPack pack)
+    {
+        new AlertDialog.Builder(this)
+            .SetTitle(pack.PackName)
+            .SetItems(new[] { "Usar este pack", "Atualizar com mais imagens" }, async (_, args) =>
+            {
+                if (args.Which == 0)
+                    await SelectPackAsync(pack);
+                else
+                    StartPackUpdate(pack);
+            })
+            .SetNegativeButton("Fechar", (_, _) => { })
+            .Show();
     }
 
     async Task SelectPackAsync(InstalledFaunaPack pack)
@@ -683,12 +698,6 @@ public sealed class MainActivity : Activity
         base.OnActivityResult(requestCode, resultCode, data);
         if (resultCode != Result.Ok)
             return;
-
-        if (requestCode == PackBuilderRequest)
-        {
-            _ = ReloadAfterPackBuilderAsync();
-            return;
-        }
 
         if (requestCode == ModelRequest && data?.Data is not null)
         {

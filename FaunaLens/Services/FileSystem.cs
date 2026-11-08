@@ -20,4 +20,7 @@ public static class FileSystem
     public static string PhotoDirectory => Path.Combine(Root, "captures");
     public static string PackDirectory => Path.Combine(Root, "faunapacks");
     public static string PackImportPath => Path.Combine(Root, "faunapack.install");
+
+    // Estado da criação de packs em segundo plano (acompanhado pela tela de criação).
+    public static string PackBuildStatePath => Path.Combine(Root, "pack_build_state.json");
 }

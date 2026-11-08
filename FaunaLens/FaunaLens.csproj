@@ -24,9 +24,6 @@
   <ItemGroup>
     <AndroidResource Include="Resources\xml\file_paths.xml" />
     <AndroidResource Include="Resources\drawable\ic_launcher.xml" />
-    <AndroidAsset Include="Data\pampa_species.json" />
-    <AndroidAsset Include="Data\pampa_species_offline.json" />
-    <AndroidAsset Include="Data\Pampa.faunapack" />
   </ItemGroup>
   <ItemGroup>
     <!-- Lógica compartilhada com o FaunaPack Builder (sem dependências de Windows). -->

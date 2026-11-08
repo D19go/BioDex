@@ -20,7 +20,8 @@ public static class PackWriter
         string packName,
         IReadOnlyList<PackSpecies> species,
         string tempDirectory,
-        string? packIdOverride = null)
+        string? packIdOverride = null,
+        PackBuildSettings? buildSettings = null)
     {
         var referencesPerSpecies = species.Count == 0 ? 0 : species[0].References.Count;
         if (referencesPerSpecies < 1)
@@ -36,7 +37,8 @@ public static class PackWriter
             PackName = packName,
             CreatedUtc = DateTime.UtcNow.ToString("O"),
             ReferencesPerSpecies = referencesPerSpecies,
-            SpeciesCount = species.Count
+            SpeciesCount = species.Count,
+            BuildSettings = buildSettings
         };
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
