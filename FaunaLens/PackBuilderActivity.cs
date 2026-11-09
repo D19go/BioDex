@@ -22,13 +22,7 @@ public sealed class PackBuilderActivity : Activity
         "Baixa fotos licenciadas do GBIF para a região escolhida e gera os embeddings no seu celular. " +
         "Precisa de internet. A criação roda em segundo plano: você pode sair do app e acompanhar pela notificação.";
 
-    static readonly string[] Regions =
-    {
-        "Brasil inteiro", "Acre", "Alagoas", "Amapá", "Amazonas", "Bahia", "Ceará", "Distrito Federal",
-        "Espírito Santo", "Goiás", "Maranhão", "Mato Grosso", "Mato Grosso do Sul", "Minas Gerais", "Pará",
-        "Paraíba", "Paraná", "Pernambuco", "Piauí", "Rio de Janeiro", "Rio Grande do Norte", "Rio Grande do Sul",
-        "Rondônia", "Roraima", "Santa Catarina", "São Paulo", "Sergipe", "Tocantins"
-    };
+    static readonly string[] Regions = BrazilRegions.SpinnerItems;
 
     static readonly int[] SpeciesOptions = { 10, 25, 50, 100 };
     static readonly int[] ImageOptions = { 2, 3, 5, 10, 20, 30, 40, 50 };
@@ -52,6 +46,7 @@ public sealed class PackBuilderActivity : Activity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        ThemeController.Apply(this);
         base.OnCreate(savedInstanceState);
         handler = new Handler(Looper.MainLooper!);
 
@@ -283,21 +278,7 @@ public sealed class PackBuilderActivity : Activity
         }.Normalized();
 
         // O estado é gravado antes de iniciar o serviço, para que a tela já mostre a criação como ativa.
-        PackBuildStateStore.Save(FileSystem.PackBuildStatePath, new PackBuildState
-        {
-            Status = "queued",
-            PackName = options.PackName,
-            Request = options,
-            Acknowledged = false,
-            UpdatedUtc = DateTime.UtcNow
-        });
-
-        var intent = new Intent(this, typeof(PackBuildForegroundService));
-        intent.SetAction(PackBuildForegroundService.ActionStart);
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
-            StartForegroundService(intent);
-        else
-            StartService(intent);
+        PackBuildLauncher.Start(this, options);
 
         StartPolling();
         RefreshFromState();

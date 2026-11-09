@@ -36,6 +36,7 @@ Hoje o escopo é o **Rio Grande do Sul** (bioma Pampa). O APK não traz espécie
 | Identificação offline (BioCLIP em ONNX) | 🚧 Em desenvolvimento |
 | Importação de catálogos `.faunapack` | 🚧 Em desenvolvimento |
 | Download do modelo em segundo plano | 🚧 Em desenvolvimento |
+| Criar packs ao mudar de estado (localização, opcional) | 🚧 Em desenvolvimento |
 | Identificação pela localização / bioma | 📝 Planejado |
 | Criar catálogos dentro do próprio app | 📝 Planejado |
 
@@ -106,6 +107,7 @@ Today the scope is **Rio Grande do Sul, Brazil** (Pampa biome). The APK ships no
 | Offline identification (BioCLIP via ONNX) | 🚧 In development |
 | Importing `.faunapack` catalogs | 🚧 In development |
 | Background model download | 🚧 In development |
+| Create packs when the state changes (location, optional) | 🚧 In development |
 | Identification by location / biome | 📝 Planned |
 | Building catalogs inside the app | 📝 Planned |
 

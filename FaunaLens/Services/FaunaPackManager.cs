@@ -3,12 +3,14 @@ using FaunaLens.Models;
 
 namespace FaunaLens.Services;
 
+// Region: estado da criação ("São Paulo"), "Brasil inteiro", ou vazio quando o pack não informa as opções de criação.
 public sealed record InstalledFaunaPack(
     string PackId,
     string PackName,
     int SpeciesCount,
     int ReferencesPerSpecies,
-    string DirectoryPath);
+    string DirectoryPath,
+    string Region = "");
 
 public sealed class FaunaPackManager
 {
@@ -58,12 +60,18 @@ public sealed class FaunaPackManager
                 if (manifest is null || string.IsNullOrWhiteSpace(manifest.PackId))
                     continue;
 
+                var stateProvince = manifest.BuildSettings?.StateProvince?.Trim();
+                var region = manifest.BuildSettings is null
+                    ? string.Empty
+                    : string.IsNullOrWhiteSpace(stateProvince) ? BrazilRegions.WholeCountry : stateProvince;
+
                 output.Add(new InstalledFaunaPack(
                     manifest.PackId,
                     manifest.PackName,
                     manifest.SpeciesCount,
                     manifest.ReferencesPerSpecies,
-                    directory));
+                    directory,
+                    region));
             }
             catch
             {

@@ -38,3 +38,11 @@
 - [ ] Compilar e testar em aparelho físico.
 - [ ] Calibrar o limiar de confiança com fotos reais.
 - [ ] Comparar o embedding do Android com o do Python (paridade do pré-processamento).
+
+## 0.6.4 — tema, criação por região e gerenciador de packs (não compilados nem testados em aparelho)
+- [x] Tema Sistema / Claro / Escuro, escolhido na tela principal e lembrado entre aberturas.
+- [x] Tela "Gerenciar FaunaPacks" substitui o diálogo: o pack selecionado é o usado na identificação.
+- [x] Criação automática por região (opcional, pede localização aproximada ao ligar): a primeira detecção só registra o estado; ao mudar de estado, cria o pack da região em segundo plano, sem duplicar região já instalada.
+- [x] Testes da política de região e do tema (`RegionPackPlannerTests`, `ThemeModesTests`).
+- [ ] Testar a detecção de estado em aparelho físico (depende do geocodificador do Android e de internet).
+- [ ] Confirmar a precisão da localização aproximada perto de divisas entre estados.
