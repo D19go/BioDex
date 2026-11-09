@@ -2,7 +2,7 @@
 
 **Português** | [English](#english)
 
-> ⚠️ **Status: em desenvolvimento.** Nenhuma função está finalizada e há erros conhecidos. O projeto ainda não foi validado em aparelhos reais.
+> ⚠️ **Status: em desenvolvimento.** Nenhuma função está finalizada e há erros conhecidos. Os testes foram feitos em um aparelho ou em um pequeno número de aparelhos, então o app ainda não foi validado em uma variedade maior de celulares.
 
 Aplicativo Android que identifica animais a partir de fotos usando inteligência artificial, pensado para quem está em trilhas e áreas com pouco ou nenhum sinal de internet.
 
@@ -73,7 +73,7 @@ Hoje o escopo é o **Rio Grande do Sul** (bioma Pampa). O APK não traz espécie
 
 # BioDex 🐾 (English)
 
-> ⚠️ **Status: work in progress.** No feature is finished yet and there are known bugs. The project has not been validated on real devices.
+> ⚠️ **Status: work in progress.** No feature is finished yet and there are known bugs. Testing so far has been done on one device or a small number of devices, so the app has not yet been validated on a wider range of phones.
 
 An Android app that identifies animals from photos using AI, designed for hikers and anyone in areas with weak or no internet.
 
