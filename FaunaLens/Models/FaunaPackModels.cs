@@ -14,6 +14,7 @@ public sealed class FaunaPackManifest
     public int SpeciesCount { get; set; }
     public string EmbeddingFile { get; set; } = "embeddings.bin";
     public string ImageFolder { get; set; } = "images";
+    public FaunaPackBuilder.PackBuildSettings? BuildSettings { get; set; }
 }
 
 public sealed class FaunaPackSpeciesEntry

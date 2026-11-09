@@ -19,6 +19,9 @@
     <Compile Include="..\FaunaLens\Services\FaunaPackReader.cs" Link="Shared\FaunaPackReader.cs" />
     <Compile Include="..\FaunaLens\Services\ResultFormatter.cs" Link="Shared\ResultFormatter.cs" />
     <Compile Include="..\FaunaLens\Services\ModelLocation.cs" Link="Shared\ModelLocation.cs" />
+    <Compile Include="..\FaunaLens\Services\PackBuildModels.cs" Link="Shared\PackBuildModels.cs" />
+    <Compile Include="..\FaunaLens\Services\ThemeModes.cs" Link="Shared\ThemeModes.cs" />
+    <Compile Include="..\FaunaLens\Services\RegionPackPlanner.cs" Link="Shared\RegionPackPlanner.cs" />
     <Compile Include="..\FaunaPackBuilder\GbifClient.cs" Link="Shared\Builder\GbifClient.cs" />
     <Compile Include="..\FaunaPackBuilder\Models.cs" Link="Shared\Builder\Models.cs" />
     <Compile Include="..\FaunaPackBuilder\PackWriter.cs" Link="Shared\Builder\PackWriter.cs" />
@@ -26,6 +29,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\FaunaLens\Data\Pampa.faunapack" Link="Pampa.faunapack" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\Pampa.faunapack" Link="Pampa.faunapack" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

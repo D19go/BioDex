@@ -168,4 +168,16 @@ public sealed class PackManifest
     public string EmbeddingFile { get; set; } = "embeddings.bin";
     public string ImageFolder { get; set; } = "images";
     public string Source { get; set; } = "GBIF occurrence search API";
+
+    // Como o pack foi criado: permite refazê-lo com as mesmas opções (por exemplo, com mais imagens).
+    public PackBuildSettings? BuildSettings { get; set; }
+}
+
+public sealed class PackBuildSettings
+{
+    public string Country { get; set; } = "BR";
+    public string StateProvince { get; set; } = "";
+    public int MaxSpecies { get; set; }
+    public int SearchPages { get; set; }
+    public bool AllowBySa { get; set; }
 }

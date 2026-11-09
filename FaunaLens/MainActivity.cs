@@ -22,7 +22,8 @@ public sealed class MainActivity : Activity
     const int GalleryRequest = 4104;
     const int PackRequest = 4105;
     const int NotificationPermissionRequest = 4106;
-    const int PackBuilderRequest = 4108;
+    const int ManagePacksRequest = 4107;
+    static readonly TimeSpan RegionCheckInterval = TimeSpan.FromMinutes(10);
 
     ImageView? preview;
     TextView? status;
@@ -42,9 +43,12 @@ public sealed class MainActivity : Activity
     bool pollingDownload;
     bool engineLoading;
     bool engineLoadFailed;
+    bool startupFinished;
+    bool regionCheckRunning;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        ThemeController.Apply(this);
         base.OnCreate(savedInstanceState);
         uiHandler = new Handler(Looper.MainLooper!);
         BuildUi();
@@ -58,6 +62,8 @@ public sealed class MainActivity : Activity
         RecoverBackgroundDownload();
         await InitializeEngineAsync();
         StartDownloadPolling();
+        startupFinished = true;
+        _ = CheckRegionPacksAsync();
     }
 
     protected override void OnResume()
@@ -65,6 +71,14 @@ public sealed class MainActivity : Activity
         base.OnResume();
         RefreshDownloadState();
         StartDownloadPolling();
+        CheckPackBuildResult();
+
+        // Antes do fim da inicialização, quem carrega o pack e verifica a região é a própria inicialização.
+        if (startupFinished)
+        {
+            _ = SyncActivePackAsync();
+            _ = CheckRegionPacksAsync();
+        }
     }
 
     protected override void OnPause()
@@ -162,7 +176,8 @@ public sealed class MainActivity : Activity
         downloadModelButton!.Enabled = true;
 
         // O download terminou em segundo plano: carrega o modelo sem exigir reiniciar o app.
-        if (engine?.IsReady != true && !engineLoading && !engineLoadFailed && File.Exists(FileSystem.ModelPath))
+        if (engine?.IsReady != true && !engineLoading && !engineLoadFailed && File.Exists(FileSystem.ModelPath)
+            && !PackBuildStateStore.Load(FileSystem.PackBuildStatePath).IsActive(DateTime.UtcNow))
         {
             _ = InitializeEngineAsync();
             return;
@@ -215,6 +230,18 @@ public sealed class MainActivity : Activity
         };
         content.AddView(subtitle, new LinearLayout.LayoutParams(-1, -2));
 
+        var themeRow = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        themeRow.SetGravity(GravityFlags.CenterVertical);
+        themeRow.SetPadding(0, 16, 0, 0);
+        themeRow.AddView(new TextView(this) { Text = "Tema", TextSize = 15 }, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        var themeSpinner = new Spinner(this);
+        themeSpinner.Adapter = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleSpinnerItem, ThemeModes.Labels);
+        themeSpinner.SetSelection(ThemeModes.IndexOf(AppSettings.GetThemeMode()));
+        themeSpinner.ItemSelected += (_, args) => OnThemeSelected(args.Position);
+        themeRow.AddView(themeSpinner, new LinearLayout.LayoutParams(0, -2, 2f));
+        content.AddView(themeRow, new LinearLayout.LayoutParams(-1, -2));
+
         preview = new ImageView(this);
         preview.SetBackgroundColor(Color.Rgb(238, 238, 238));
         preview.SetScaleType(ImageView.ScaleType.FitCenter);
@@ -238,7 +265,7 @@ public sealed class MainActivity : Activity
         content.AddView(importPackButton);
 
         var managePackButton = new Button(this) { Text = "📚 Gerenciar FaunaPacks" };
-        managePackButton.Click += async (_, _) => await ShowPackManagerAsync();
+        managePackButton.Click += (_, _) => StartManagePacks();
         content.AddView(managePackButton);
 
         var createPackButton = new Button(this) { Text = "🧭 Criar FaunaPack por região" };
@@ -296,53 +323,23 @@ public sealed class MainActivity : Activity
                     .FirstOrDefault();
             }
 
-            FaunaPackData? pack;
-            if (!string.IsNullOrWhiteSpace(selectedDirectory))
+            // Sem FaunaPack, o app começa vazio: não há demonstração embutida no APK.
+            if (string.IsNullOrWhiteSpace(selectedDirectory))
             {
-                var directory = selectedDirectory;
-                pack = await Task.Run(() => packManager.LoadAsync(directory).GetAwaiter().GetResult());
-            }
-            else
-            {
-                // Primeira abertura: instala o pacote de demonstração que acompanha o APK.
-                pack = await InstallBundledPackAsync();
-            }
-
-            if (pack is not null)
-            {
-                installedPack = pack;
-                catalog.LoadPack(pack);
+                installedPack = null;
+                catalog.Clear();
                 return;
             }
+
+            var directory = selectedDirectory;
+            var pack = await Task.Run(() => packManager.LoadAsync(directory).GetAwaiter().GetResult());
+            installedPack = pack;
+            catalog.LoadPack(pack);
         }
         catch
         {
             installedPack = null;
-        }
-
-        using var stream = Assets!.Open("Data/pampa_species_offline.json");
-        catalog.Load(stream, "Pampa — demonstração");
-    }
-
-    async Task<FaunaPackData?> InstallBundledPackAsync()
-    {
-        var temporaryPath = System.IO.Path.Combine(FileSystem.Root, $"bundled_{Guid.NewGuid():N}.install");
-        try
-        {
-            using (var input = Assets!.Open("Data/Pampa.faunapack"))
-            using (var output = File.Create(temporaryPath))
-                await input.CopyToAsync(output);
-
-            return await Task.Run(() => packManager.InstallAsync(temporaryPath).GetAwaiter().GetResult());
-        }
-        catch
-        {
-            return null;
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
+            catalog.Clear();
         }
     }
 
@@ -353,7 +350,7 @@ public sealed class MainActivity : Activity
             : "BioCLIP offline não instalado. Toque em “Baixar BioCLIP offline”.";
 
         var packStatus = installedPack is null
-            ? $"Catálogo: {catalog.SourceName} ({catalog.Count} espécies)."
+            ? "Nenhum FaunaPack ativo. Crie um em “Criar FaunaPack por região” ou importe um .faunapack."
             : $"FaunaPack ativo: {installedPack.Manifest.PackName} ({catalog.Count} espécies; {installedPack.Manifest.ReferencesPerSpecies} referência(s)/espécie).";
 
         status!.Text = modelStatus + "\n" + packStatus;
@@ -450,20 +447,52 @@ public sealed class MainActivity : Activity
 
     void StartPackBuilder()
     {
-        // A tela de packs carrega o próprio BioCLIP. Libera o desta tela para não manter dois na memória.
+        // A criação roda em segundo plano e carrega o próprio BioCLIP. Libera o desta tela para não manter dois na memória.
         engine?.Dispose();
         engine = null;
-        StartActivityForResult(new Intent(this, typeof(PackBuilderActivity)), PackBuilderRequest);
+        StartActivity(new Intent(this, typeof(PackBuilderActivity)));
     }
 
-    async Task ReloadAfterPackBuilderAsync()
+    void StartPackUpdate(string directory)
+    {
+        if (PackBuildStateStore.Load(FileSystem.PackBuildStatePath).IsActive(DateTime.UtcNow))
+        {
+            result!.Text = "Já existe um FaunaPack sendo criado. Aguarde terminar ou cancele pela tela de criação.";
+            return;
+        }
+
+        engine?.Dispose();
+        engine = null;
+        var intent = new Intent(this, typeof(PackBuilderActivity));
+        intent.PutExtra(PackBuilderActivity.ExtraUpdatePackDirectory, directory);
+        StartActivity(intent);
+    }
+
+    // Mostra uma única vez o resultado de uma criação feita em segundo plano e recarrega o pack, se foi criado.
+    void CheckPackBuildResult()
+    {
+        var state = PackBuildStateStore.Load(FileSystem.PackBuildStatePath);
+        if (state.Acknowledged || !state.IsFinished)
+            return;
+
+        PackBuildStateStore.Acknowledge(FileSystem.PackBuildStatePath);
+        if (state.Status == "completed")
+        {
+            result!.Text = $"FaunaPack \"{state.PackName}\" pronto: {state.ResultSpeciesCount} espécies.";
+            _ = ReloadPackAsync();
+            return;
+        }
+
+        result!.Text = state.Status == "failed"
+            ? $"A criação do FaunaPack falhou: {state.Error}"
+            : "Criação do FaunaPack cancelada.";
+    }
+
+    async Task ReloadPackAsync()
     {
         await LoadCatalogOrInstalledPackAsync();
         if (File.Exists(FileSystem.ModelPath))
             await InitializeEngineAsync();
-        result!.Text = installedPack is null
-            ? "O pack foi criado, mas não foi possível carregá-lo."
-            : "FaunaPack criado e ativado.";
         UpdateEngineStatus();
     }
 
@@ -566,48 +595,90 @@ public sealed class MainActivity : Activity
         }
     }
 
-    async Task ShowPackManagerAsync()
+    void StartManagePacks()
     {
-        status!.Text = "Lendo FaunaPacks instalados...";
+        StartActivityForResult(new Intent(this, typeof(PackManagerActivity)), ManagePacksRequest);
+    }
 
-        IReadOnlyList<InstalledFaunaPack> packs;
+    // A seleção é feita na tela de gerenciamento: ao voltar, carrega o pack que ficou ativo.
+    async Task SyncActivePackAsync()
+    {
         try
         {
-            packs = await packManager.ListAsync();
+            var activeId = packManager.GetActivePackId();
+            if (string.IsNullOrWhiteSpace(activeId) || activeId == installedPack?.Manifest.PackId)
+                return;
+
+            var pack = (await packManager.ListAsync()).FirstOrDefault(x => x.PackId == activeId);
+            if (pack is not null)
+                await SelectPackAsync(pack);
         }
         catch (Exception ex)
         {
-            result!.Text = $"Falha ao listar FaunaPacks: {ex.Message}";
-            UpdateEngineStatus();
-            return;
+            result!.Text = $"Não foi possível trocar o FaunaPack: {ex.Message}";
         }
+    }
 
-        if (packs.Count == 0)
+    // Só com a opção ligada: detecta o estado pela localização e cria o pack da região quando ela muda.
+    async Task CheckRegionPacksAsync()
+    {
+        if (regionCheckRunning || !AppSettings.IsAutoRegionEnabled())
+            return;
+
+        regionCheckRunning = true;
+        try
         {
-            new AlertDialog.Builder(this)
-                .SetTitle("FaunaPacks")
-                .SetMessage("Nenhum FaunaPack está instalado.\n\nUse “Importar FaunaPack” para adicionar um pacote.")
-                .SetPositiveButton("OK", (_, _) => { })
-                .Show();
-            UpdateEngineStatus();
-            return;
-        }
-
-        var activeId = packManager.GetActivePackId();
-        var labels = packs
-            .Select(x => x.PackName + (x.PackId == activeId ? "  ✓ ativo" : ""))
-            .ToArray();
-
-        var dialog = new AlertDialog.Builder(this)
-            .SetTitle("FaunaPacks instalados")
-            .SetItems(labels, async (_, args) =>
+            string? detected = null;
+            var now = DateTime.UtcNow;
+            if (now - AppSettings.GetLastRegionCheckUtc() >= RegionCheckInterval && LocationRegionDetector.HasPermission(this))
             {
-                await SelectPackAsync(packs[args.Which]);
-            })
-            .SetNegativeButton("Fechar", (_, _) => { })
-            .Create();
+                AppSettings.SetLastRegionCheckUtc(now);
+                detected = await LocationRegionDetector.DetectStateAsync(this, CancellationToken.None);
+            }
 
-        dialog.Show();
+            var installedRegions = (await packManager.ListAsync()).Select(pack => pack.Region).ToList();
+            var buildActive = PackBuildStateStore.Load(FileSystem.PackBuildStatePath).IsActive(DateTime.UtcNow);
+            var modelReady = File.Exists(FileSystem.ModelPath) && ModelStorage.HasAccess(this);
+
+            var plan = RegionPackPlanner.Plan(AppSettings.GetRegionState(), detected, installedRegions, buildActive, modelReady);
+            AppSettings.SetRegionState(plan.Next);
+
+            if (plan.StartRegion is not null)
+                StartRegionBuild(plan.StartRegion);
+        }
+        catch (Exception)
+        {
+            // Localização indisponível ou arquivo ilegível: tenta de novo na próxima abertura.
+        }
+        finally
+        {
+            regionCheckRunning = false;
+        }
+    }
+
+    void StartRegionBuild(string region)
+    {
+        // Como na tela de criação, libera o BioCLIP desta tela: o serviço carrega o próprio.
+        engine?.Dispose();
+        engine = null;
+
+        RequestNotificationPermissionIfNeeded();
+        PackBuildLauncher.Start(this, new PackBuildOptions { PackName = $"{region} (automático)", StateProvince = region }.Normalized());
+        result!.Text = $"Mudança de região detectada: criando um FaunaPack de {region} em segundo plano. Acompanhe pela notificação.";
+    }
+
+    void OnThemeSelected(int position)
+    {
+        if (position < 0 || position >= ThemeModes.Values.Length)
+            return;
+
+        var mode = ThemeModes.Values[position];
+        if (mode == AppSettings.GetThemeMode())
+            return;
+
+        // Recria a tela para aplicar o tema. A foto aberta não é mantida nessa troca.
+        AppSettings.SetThemeMode(mode);
+        Recreate();
     }
 
     async Task SelectPackAsync(InstalledFaunaPack pack)
@@ -684,9 +755,12 @@ public sealed class MainActivity : Activity
         if (resultCode != Result.Ok)
             return;
 
-        if (requestCode == PackBuilderRequest)
+        // A tela de gerenciamento devolve OK só quando o usuário pede para atualizar um pack.
+        if (requestCode == ManagePacksRequest)
         {
-            _ = ReloadAfterPackBuilderAsync();
+            var directory = data?.GetStringExtra(PackBuilderActivity.ExtraUpdatePackDirectory);
+            if (!string.IsNullOrWhiteSpace(directory))
+                StartPackUpdate(directory);
             return;
         }
 

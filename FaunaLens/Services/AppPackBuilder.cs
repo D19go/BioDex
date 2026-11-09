@@ -5,14 +5,6 @@ using Bitmap = Android.Graphics.Bitmap;
 
 namespace FaunaLens.Services;
 
-public sealed record PackBuildOptions(
-    string PackName,
-    string StateProvince,
-    int MaxSpecies,
-    int ImagesPerSpecies,
-    int SearchPages,
-    bool AllowBySa);
-
 // Mesma lógica do FaunaPack Builder (busca no GBIF, licenças, formato do pacote), mas os
 // embeddings são gerados pelo BioCLIP do próprio celular, o mesmo usado na identificação.
 public sealed class AppPackBuilder
@@ -35,8 +27,9 @@ public sealed class AppPackBuilder
     }
 
     // Devolve o caminho de um .faunapack temporário, pronto para ser instalado.
-    public async Task<string> BuildToFileAsync(PackBuildOptions options, CancellationToken ct)
+    public async Task<string> BuildToFileAsync(PackBuildOptions requested, CancellationToken ct)
     {
+        var options = requested.Normalized();
         if (!engine.IsReady)
             throw new InvalidOperationException("O BioCLIP não está carregado.");
 
@@ -90,7 +83,16 @@ public sealed class AppPackBuilder
                 throw new InvalidOperationException("Nenhuma espécie conseguiu a quantidade de imagens licenciadas configurada.");
 
             log($"Escrevendo pack com {built.Count} espécies...");
-            PackWriter.Write(output, options.PackName.Trim(), built, work, BuildPackId(options.PackName));
+            var packId = options.UpdatePackId ?? BuildPackId(options.PackName);
+            var settings = new PackBuildSettings
+            {
+                Country = CountryCode,
+                StateProvince = options.StateProvince,
+                MaxSpecies = options.MaxSpecies,
+                SearchPages = options.SearchPages,
+                AllowBySa = options.AllowBySa
+            };
+            PackWriter.Write(output, options.PackName, built, work, packId, settings);
             return output;
         }
         catch

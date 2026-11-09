@@ -26,7 +26,7 @@ Tudo isso roda **offline**, depois que o modelo e o catálogo estão instalados.
 
 A meta final é usar a **localização do usuário** para descobrir o bioma onde ele está e carregar só os animais daquela região. Com menos candidatos, a busca fica mais rápida e mais precisa.
 
-Hoje o escopo é o **Rio Grande do Sul** (bioma Pampa), com um catálogo de demonstração de 5 espécies.
+Hoje o escopo é o **Rio Grande do Sul** (bioma Pampa). O APK não traz espécies: você cria um FaunaPack pela tela "Criar FaunaPack por região" (em segundo plano) ou importa um `.faunapack`.
 
 ## Estado atual
 
@@ -36,6 +36,7 @@ Hoje o escopo é o **Rio Grande do Sul** (bioma Pampa), com um catálogo de demo
 | Identificação offline (BioCLIP em ONNX) | 🚧 Em desenvolvimento |
 | Importação de catálogos `.faunapack` | 🚧 Em desenvolvimento |
 | Download do modelo em segundo plano | 🚧 Em desenvolvimento |
+| Criar packs ao mudar de estado (localização, opcional) | 🚧 Em desenvolvimento |
 | Identificação pela localização / bioma | 📝 Planejado |
 | Criar catálogos dentro do próprio app | 📝 Planejado |
 
@@ -96,7 +97,7 @@ It runs **offline** once the model and the catalog are installed.
 
 The end goal is to use the **user's location** to find their biome and load only the animals from that region, making searches faster and more accurate.
 
-Today the scope is **Rio Grande do Sul, Brazil** (Pampa biome), with a demo catalog of 5 species.
+Today the scope is **Rio Grande do Sul, Brazil** (Pampa biome). The APK ships no species: you create a FaunaPack in the "Create FaunaPack by region" screen (in the background) or import a `.faunapack`.
 
 ## Current status
 
@@ -106,6 +107,7 @@ Today the scope is **Rio Grande do Sul, Brazil** (Pampa biome), with a demo cata
 | Offline identification (BioCLIP via ONNX) | 🚧 In development |
 | Importing `.faunapack` catalogs | 🚧 In development |
 | Background model download | 🚧 In development |
+| Create packs when the state changes (location, optional) | 🚧 In development |
 | Identification by location / biome | 📝 Planned |
 | Building catalogs inside the app | 📝 Planned |
 

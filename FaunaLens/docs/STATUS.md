@@ -24,7 +24,9 @@
 
 ## 0.6.2 — correções da primeira revisão (não compiladas nem testadas em aparelho)
 - [x] O modelo é carregado automaticamente quando o download termina (sem reiniciar o app) e o progresso aparece ao vivo.
-- [x] O pacote de demonstração Pampa.faunapack acompanha o APK e é instalado na primeira abertura.
+- [x] O APK não traz mais pacote de demonstração: o app começa sem espécies e o usuário cria ou importa um FaunaPack.
+- [x] A criação de FaunaPack roda em serviço em primeiro plano, com notificação de progresso; a tela pode ser fechada sem cancelar.
+- [x] Packs guardam as opções de criação e podem ser atualizados (mais imagens por espécie, até 50) pelo gerenciador.
 - [x] Fotos são abertas reduzidas e com a rotação EXIF corrigida (menos risco de falta de memória).
 - [x] A galeria copia o arquivo original em vez de recomprimir em tamanho cheio.
 - [x] O catálogo/pacote é carregado fora da thread da tela.
@@ -36,3 +38,11 @@
 - [ ] Compilar e testar em aparelho físico.
 - [ ] Calibrar o limiar de confiança com fotos reais.
 - [ ] Comparar o embedding do Android com o do Python (paridade do pré-processamento).
+
+## 0.6.4 — tema, criação por região e gerenciador de packs (não compilados nem testados em aparelho)
+- [x] Tema Sistema / Claro / Escuro, escolhido na tela principal e lembrado entre aberturas.
+- [x] Tela "Gerenciar FaunaPacks" substitui o diálogo: o pack selecionado é o usado na identificação.
+- [x] Criação automática por região (opcional, pede localização aproximada ao ligar): a primeira detecção só registra o estado; ao mudar de estado, cria o pack da região em segundo plano, sem duplicar região já instalada.
+- [x] Testes da política de região e do tema (`RegionPackPlannerTests`, `ThemeModesTests`).
+- [ ] Testar a detecção de estado em aparelho físico (depende do geocodificador do Android e de internet).
+- [ ] Confirmar a precisão da localização aproximada perto de divisas entre estados.
