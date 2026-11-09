@@ -107,5 +107,8 @@ public static class LocationRegionDetector
         public void OnProviderDisabled(string provider) { }
 
         public void OnProviderEnabled(string provider) { }
+
+        // Obrigatório na interface do Android (mesmo deprecado); não há o que fazer com ele aqui.
+        public void OnStatusChanged(string? provider, Availability status, Bundle? extras) { }
     }
 }
