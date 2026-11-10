@@ -11,6 +11,11 @@ public sealed class GbifClient : IDisposable
     readonly HttpClient client;
     readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
 
+    // Limites por requisição. Sem eles, uma resposta travada do GBIF prendia a criação por minutos, sem log.
+    static readonly TimeSpan JsonTimeout = TimeSpan.FromSeconds(90);
+    static readonly TimeSpan ImageTimeout = TimeSpan.FromSeconds(45);
+    const int JsonAttempts = 3;
+
     public GbifClient()
     {
         client = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
@@ -189,9 +194,19 @@ public sealed class GbifClient : IDisposable
         var hash = Convert.ToHexString(
             MD5.HashData(Encoding.UTF8.GetBytes(media.Identifier))).ToLowerInvariant();
         var url = $"{ApiRoot}/image/cache/800x/occurrence/{occurrence.Key}/media/{hash}";
-        using var response = await client.GetAsync(url, ct);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsByteArrayAsync(ct);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(ImageTimeout);
+        try
+        {
+            using var response = await client.GetAsync(url, timeout.Token);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsByteArrayAsync(timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Só o limite de tempo cancelou: vira erro comum, para o chamador pular esta imagem.
+            throw new TimeoutException($"o GBIF não entregou a imagem em {ImageTimeout.TotalSeconds:0} s");
+        }
     }
 
     async Task<string?> GetBestVernacularNameAsync(long key, CancellationToken ct)
@@ -227,12 +242,37 @@ public sealed class GbifClient : IDisposable
 
     async Task<T?> GetJsonAsync<T>(string url, CancellationToken ct)
     {
-        using var response = await client.GetAsync(url, ct);
-        if (response.StatusCode == HttpStatusCode.NotFound)
-            return default;
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        return await JsonSerializer.DeserializeAsync<T>(stream, json, ct);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await GetJsonOnceAsync<T>(url, ct);
+            }
+            catch (TimeoutException) when (attempt < JsonAttempts)
+            {
+                Log?.Invoke($"  GBIF sem resposta (tentativa {attempt}/{JsonAttempts}); tentando de novo...");
+                await Task.Delay(TimeSpan.FromSeconds(2), ct);
+            }
+        }
+    }
+
+    async Task<T?> GetJsonOnceAsync<T>(string url, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(JsonTimeout);
+        try
+        {
+            using var response = await client.GetAsync(url, timeout.Token);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return default;
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+            return await JsonSerializer.DeserializeAsync<T>(stream, json, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"o GBIF não respondeu em {JsonTimeout.TotalSeconds:0} s");
+        }
     }
 
     public Action<string>? Log { get; set; }

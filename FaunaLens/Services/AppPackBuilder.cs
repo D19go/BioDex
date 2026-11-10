@@ -144,7 +144,11 @@ public sealed class AppPackBuilder
 
                 try
                 {
+                    log($"  GBIF {occurrence.Key}: baixando imagem...");
+                    var started = DateTime.UtcNow;
                     var raw = await gbif.DownloadImageAsync(occurrence, media, ct);
+                    var downloadSeconds = (DateTime.UtcNow - started).TotalSeconds;
+                    log($"  GBIF {occurrence.Key}: {raw.Length / 1024} KB em {downloadSeconds:0.0} s");
                     if (raw.Length < MinImageBytes) continue;
 
                     var thumbnail = await Task.Run(() => MakeThumbnail(raw, work), ct);
@@ -157,7 +161,9 @@ public sealed class AppPackBuilder
                     var localPath = Path.Combine(folder, $"{index}.jpg");
                     await File.WriteAllBytesAsync(localPath, thumbnail, ct);
 
+                    var embedStarted = DateTime.UtcNow;
                     var vector = await Task.Run(() => engine.EncodeImage(localPath), ct);
+                    var embedMs = (DateTime.UtcNow - embedStarted).TotalMilliseconds;
                     if (vector.Length != EmbeddingDimension)
                         throw new InvalidOperationException($"Embedding inesperado: {vector.Length} dimensões.");
 
@@ -175,7 +181,7 @@ public sealed class AppPackBuilder
                         Dataset = occurrence.DatasetName
                     });
 
-                    log($"  imagem {index}/{options.ImagesPerSpecies}: GBIF {occurrence.Key}, licença {media.License}");
+                    log($"  imagem {index}/{options.ImagesPerSpecies} pronta (embedding {embedMs:0} ms)");
                 }
                 catch (OperationCanceledException)
                 {
