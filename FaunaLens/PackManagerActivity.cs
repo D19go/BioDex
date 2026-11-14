@@ -19,6 +19,7 @@ public sealed class PackManagerActivity : Activity
     string? selectedPackId;
     LinearLayout? packList;
     Button? updateButton;
+    Button? propertiesButton;
     CheckBox? autoCheck;
     TextView? message;
 
@@ -59,6 +60,10 @@ public sealed class PackManagerActivity : Activity
         updateButton.Click += (_, _) => RequestUpdate();
         content.AddView(updateButton);
 
+        propertiesButton = new Button(this) { Text = "Propriedades do pack selecionado", Enabled = false };
+        propertiesButton.Click += (_, _) => OpenProperties();
+        content.AddView(propertiesButton);
+
         var autoTitle = new TextView(this) { Text = "Criação automática por região", TextSize = 18 };
         autoTitle.SetTypeface(null, Android.Graphics.TypefaceStyle.Bold);
         autoTitle.SetPadding(0, 32, 0, 8);
@@ -77,7 +82,7 @@ public sealed class PackManagerActivity : Activity
             TextSize = 13,
             Text = "Usa a localização aproximada do celular, verificada ao abrir o app (no máximo a cada 10 minutos). " +
                    "A primeira detecção só registra o estado. Quando o estado muda, cria sozinho um pack da nova região " +
-                   "(50 espécies, 2 imagens cada) em segundo plano. Se a região já tiver um pack, não cria outro."
+                   "em segundo plano. Se a região já tiver um pack, amplia esse pack com imagens novas, sem repetir as que ele já tem."
         });
 
         message = new TextView(this) { TextSize = 13 };
@@ -128,12 +133,13 @@ public sealed class PackManagerActivity : Activity
         }
 
         updateButton!.Enabled = selectedPackId is not null;
+        propertiesButton!.Enabled = selectedPackId is not null;
     }
 
     static string Describe(InstalledFaunaPack pack)
     {
         var scope = pack.Region.Length == 0 ? string.Empty : $" · {pack.Region}";
-        return $"{pack.PackName}\n{pack.SpeciesCount} espécies × {pack.ReferencesPerSpecies} imagens{scope}";
+        return $"{pack.PackName}\n{pack.SpeciesCount} espécies · até {pack.ReferencesPerSpecies} imagens por espécie{scope}";
     }
 
     void SelectPack(string packId)
@@ -157,6 +163,21 @@ public sealed class PackManagerActivity : Activity
         var intent = new Intent().PutExtra(PackBuilderActivity.ExtraUpdatePackDirectory, pack.DirectoryPath);
         SetResult(Result.Ok, intent);
         Finish();
+    }
+
+    // Nome e quantidade de imagens de cada espécie do pack escolhido.
+    void OpenProperties()
+    {
+        var pack = packs.FirstOrDefault(x => x.PackId == selectedPackId);
+        if (pack is null)
+        {
+            message!.Text = "Escolha um pack primeiro.";
+            return;
+        }
+
+        var intent = new Intent(this, typeof(PackPropertiesActivity));
+        intent.PutExtra(PackPropertiesActivity.ExtraPackDirectory, pack.DirectoryPath);
+        StartActivity(intent);
     }
 
     void OnAutoToggled(bool enable)

@@ -8,7 +8,9 @@ namespace FaunaLens.Services;
 public sealed class FaunaPackReader
 {
     const string Magic = "FLPK";
-    const int ExpectedVersion = 1;
+
+    // 1: todas as espécies têm a mesma quantidade de imagens. 2: cada espécie tem a sua (pack parcial ou ampliado).
+    const int MaxFormatVersion = 2;
     const int ExpectedDimension = 512;
     const long MaxExtractedBytes = 512L * 1024 * 1024;
     const int MaxSpecies = 5000;
@@ -60,7 +62,9 @@ public sealed class FaunaPackReader
         {
             if (entry.Species is null || string.IsNullOrWhiteSpace(entry.Species.Id))
                 throw new InvalidDataException("Uma espécie do FaunaPack possui ID inválido.");
-            if (entry.References.Count != manifest.ReferencesPerSpecies)
+            if (entry.References.Count < 1 || entry.References.Count > MaxReferencesPerSpecies)
+                throw new InvalidDataException($"A espécie '{entry.Species.CommonName}' tem {entry.References.Count} imagens; o limite é de 1 a {MaxReferencesPerSpecies}.");
+            if (manifest.FormatVersion == 1 && entry.References.Count != manifest.ReferencesPerSpecies)
                 throw new InvalidDataException($"A espécie '{entry.Species.CommonName}' possui {entry.References.Count} referências; o manifesto informa {manifest.ReferencesPerSpecies}.");
 
             foreach (var reference in entry.References)
@@ -76,9 +80,22 @@ public sealed class FaunaPackReader
             }
         }
 
-        var embeddings = await ReadEmbeddingsAsync(Path.Combine(packDirectory, manifest.EmbeddingFile), entries.Count, manifest.EmbeddingDimension, manifest.ReferencesPerSpecies, cancellationToken);
-        for (var i = 0; i < entries.Count; i++) entries[i].Species.Embedding = embeddings[i];
+        var counts = entries.Select(entry => entry.References.Count).ToList();
+        var vectors = await ReadVectorsAsync(Path.Combine(packDirectory, manifest.EmbeddingFile), counts, manifest.ReferencesPerSpecies, cancellationToken);
+        for (var i = 0; i < entries.Count; i++) entries[i].Species.Embedding = Mean(vectors[i]);
         return new FaunaPackData(manifest, entries, packDirectory);
+    }
+
+    // Vetor de cada imagem (já normalizado), na ordem de species.json. Permite ampliar um pack
+    // reaproveitando os embeddings que ele já tem, sem recalculá-los.
+    public async Task<List<List<float[]>>> ReadReferenceEmbeddingsAsync(FaunaPackData data, CancellationToken cancellationToken = default)
+    {
+        var counts = data.Entries.Select(entry => entry.References.Count).ToList();
+        return await ReadVectorsAsync(
+            Path.Combine(data.DirectoryPath, data.Manifest.EmbeddingFile),
+            counts,
+            data.Manifest.ReferencesPerSpecies,
+            cancellationToken);
     }
 
     static void ExtractAndValidate(string sourcePath, string destinationDirectory, CancellationToken cancellationToken)
@@ -114,15 +131,18 @@ public sealed class FaunaPackReader
             ?? throw new InvalidDataException($"Arquivo JSON inválido: {Path.GetFileName(path)}.");
     }
 
-    static async Task<List<float[]>> ReadEmbeddingsAsync(string path, int speciesCount, int dimension, int referencesPerSpecies, CancellationToken cancellationToken)
+    // Lê os vetores de todas as imagens. counts[i] é a quantidade de imagens da espécie i.
+    static async Task<List<List<float[]>>> ReadVectorsAsync(string path, IReadOnlyList<int> counts, int referencesPerSpecies, CancellationToken cancellationToken)
     {
         if (!File.Exists(path)) throw new InvalidDataException("embeddings.bin não encontrado.");
-        var expectedVectors = checked(speciesCount * referencesPerSpecies);
-        var expectedBytes = checked(4L + sizeof(int) * 4L + expectedVectors * dimension * sizeof(float));
+
+        long expectedVectors = 0;
+        foreach (var count in counts) expectedVectors = checked(expectedVectors + count);
+        var expectedBytes = checked(4L + sizeof(int) * 4L + expectedVectors * ExpectedDimension * sizeof(float));
         var actualBytes = new FileInfo(path).Length;
         if (actualBytes != expectedBytes) throw new InvalidDataException($"embeddings.bin possui tamanho incompatível. Esperado: {expectedBytes} bytes; recebido: {actualBytes}.");
 
-        var output = new List<float[]>(speciesCount);
+        var output = new List<List<float[]>>(counts.Count);
         await using var stream = File.OpenRead(path);
         using var reader = new BinaryReader(stream, Encoding.ASCII, leaveOpen: false);
         var magic = Encoding.ASCII.GetString(reader.ReadBytes(4));
@@ -131,33 +151,40 @@ public sealed class FaunaPackReader
         var fileReferences = reader.ReadInt32();
         var fileDimension = reader.ReadInt32();
         if (magic != Magic) throw new InvalidDataException("embeddings.bin não é um FaunaPack válido.");
-        if (version != ExpectedVersion) throw new InvalidDataException($"Versão de FaunaPack não suportada: {version}.");
-        if (fileSpeciesCount != speciesCount) throw new InvalidDataException("A quantidade de espécies não coincide com species.json.");
+        if (version is < 1 or > MaxFormatVersion) throw new InvalidDataException($"Versão de FaunaPack não suportada: {version}.");
+        if (fileSpeciesCount != counts.Count) throw new InvalidDataException("A quantidade de espécies não coincide com species.json.");
         if (fileReferences != referencesPerSpecies) throw new InvalidDataException("A quantidade de referências não coincide com o manifesto.");
-        if (fileDimension != dimension || dimension != ExpectedDimension) throw new InvalidDataException("A dimensão dos embeddings não é compatível com BioCLIP v1.");
+        if (fileDimension != ExpectedDimension) throw new InvalidDataException("A dimensão dos embeddings não é compatível com BioCLIP v1.");
 
-        for (var speciesIndex = 0; speciesIndex < speciesCount; speciesIndex++)
+        for (var speciesIndex = 0; speciesIndex < counts.Count; speciesIndex++)
         {
-            var vectors = new List<float[]>(referencesPerSpecies);
-            for (var referenceIndex = 0; referenceIndex < referencesPerSpecies; referenceIndex++)
+            var vectors = new List<float[]>(counts[speciesIndex]);
+            for (var referenceIndex = 0; referenceIndex < counts[speciesIndex]; referenceIndex++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var vector = new float[dimension];
-                for (var i = 0; i < dimension; i++) vector[i] = reader.ReadSingle();
+                var vector = new float[ExpectedDimension];
+                for (var i = 0; i < ExpectedDimension; i++) vector[i] = reader.ReadSingle();
                 Normalize(vector);
                 vectors.Add(vector);
             }
-            var mean = new float[dimension];
-            foreach (var vector in vectors) for (var i = 0; i < dimension; i++) mean[i] += vector[i] / vectors.Count;
-            Normalize(mean);
-            output.Add(mean);
+            output.Add(vectors);
         }
         return output;
     }
 
+    // Embedding da espécie: média normalizada das imagens.
+    static float[] Mean(List<float[]> vectors)
+    {
+        var mean = new float[ExpectedDimension];
+        foreach (var vector in vectors)
+            for (var i = 0; i < ExpectedDimension; i++) mean[i] += vector[i] / vectors.Count;
+        Normalize(mean);
+        return mean;
+    }
+
     static void ValidateManifest(FaunaPackManifest manifest)
     {
-        if (manifest.FormatVersion != ExpectedVersion) throw new InvalidDataException($"Versão de FaunaPack não suportada: {manifest.FormatVersion}.");
+        if (manifest.FormatVersion is < 1 or > MaxFormatVersion) throw new InvalidDataException($"Versão de FaunaPack não suportada: {manifest.FormatVersion}.");
         if (manifest.EmbeddingDimension != ExpectedDimension) throw new InvalidDataException("O FaunaPack não usa embeddings BioCLIP v1 de 512 dimensões.");
         if (manifest.ReferencesPerSpecies < 1 || manifest.ReferencesPerSpecies > MaxReferencesPerSpecies) throw new InvalidDataException("A quantidade de referências por espécie não é suportada.");
         if (!string.Equals(manifest.EmbeddingFile, "embeddings.bin", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Arquivo de embeddings não suportado pelo formato atual.");
@@ -181,4 +208,3 @@ public sealed class FaunaPackReader
         for (var i = 0; i < vector.Length; i++) vector[i] = (float)(vector[i] / norm);
     }
 }
-

@@ -224,21 +224,36 @@ public sealed class GbifClient : IDisposable
         }
     }
 
-    // Prefere português; na falta dele, inglês. Nunca usa um idioma arbitrário (já apareceu
-    // um nome em turco): sem nome em pt/en o catálogo usa o nome científico.
-    internal static string? PickVernacularName(IEnumerable<GbifVernacularName>? names)
+    // Ordem: português (BR) e, na falta dele, nome em língua indígena, que fica no original.
+    // Nenhum outro idioma entra: sem nome nesses dois grupos, o catálogo usa o nome científico.
+    // Os códigos indígenas são os mais prováveis no GBIF; ajuste pelos nomes que aparecerem.
+    static readonly string[] IndigenousLanguageCodes = { "gn", "grn", "gug", "tup", "tpn", "yrl", "kgp" };
+
+    public static string? PickVernacularName(IEnumerable<GbifVernacularName>? names)
     {
         if (names is null)
             return null;
 
         var list = names.Where(x => !string.IsNullOrWhiteSpace(x.VernacularName)).ToList();
 
-        static bool Is(GbifVernacularName x, params string[] codes) =>
-            codes.Any(c => string.Equals(x.Language, c, StringComparison.OrdinalIgnoreCase));
+        // Dentro do mesmo grupo, o nome marcado como preferido pelo GBIF vem primeiro.
+        static string? First(IEnumerable<GbifVernacularName> source, Func<string, bool> language) =>
+            source.Where(x => language(x.Language ?? ""))
+                  .OrderByDescending(x => x.Preferred == true)
+                  .Select(x => x.VernacularName!.Trim())
+                  .FirstOrDefault();
 
-        return list.FirstOrDefault(x => Is(x, "por", "pt"))?.VernacularName
-            ?? list.FirstOrDefault(x => Is(x, "eng", "en"))?.VernacularName;
+        return First(list, IsPortuguese) ?? First(list, IsIndigenous);
     }
+
+    static bool IsPortuguese(string language) =>
+        language.Equals("por", StringComparison.OrdinalIgnoreCase) ||
+        language.Equals("pt", StringComparison.OrdinalIgnoreCase) ||
+        language.StartsWith("pt-", StringComparison.OrdinalIgnoreCase) ||
+        language.StartsWith("pt_", StringComparison.OrdinalIgnoreCase);
+
+    static bool IsIndigenous(string language) =>
+        IndigenousLanguageCodes.Any(code => language.Equals(code, StringComparison.OrdinalIgnoreCase));
 
     async Task<T?> GetJsonAsync<T>(string url, CancellationToken ct)
     {

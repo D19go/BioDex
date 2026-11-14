@@ -84,6 +84,18 @@ public sealed class FaunaPackManager
             .ToList();
     }
 
+    // Pack que a criação deve ampliar: o escolhido para atualização ou, na falta dele, o da mesma região.
+    public async Task<InstalledFaunaPack?> FindBaselineAsync(PackBuildOptions options, CancellationToken cancellationToken = default)
+    {
+        var packs = await ListAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(options.UpdatePackId))
+            return packs.FirstOrDefault(pack => pack.PackId == options.UpdatePackId);
+
+        var region = string.IsNullOrWhiteSpace(options.StateProvince) ? BrazilRegions.WholeCountry : options.StateProvince;
+        return packs.FirstOrDefault(pack => pack.Region.Length > 0 && RegionPackPlanner.Same(pack.Region, region));
+    }
+
     public async Task<FaunaPackData> LoadAsync(
         string directoryPath,
         CancellationToken cancellationToken = default)

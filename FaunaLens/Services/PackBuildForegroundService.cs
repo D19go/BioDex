@@ -71,8 +71,17 @@ public sealed class PackBuildForegroundService : Service
             if (!engine.IsReady)
                 throw new InvalidOperationException("Não foi possível carregar o BioCLIP.");
 
+            // Se já existe um pack desta região (ou o escolhido para atualizar), ele é ampliado em vez de refeito.
+            var baseline = await new FaunaPackManager().FindBaselineAsync(options, token);
+            if (baseline is not null)
+            {
+                if (baseline.Region.Length > 0)
+                    options.StateProvince = baseline.Region == BrazilRegions.WholeCountry ? "" : baseline.Region;
+                journal.Log($"Já existe o pack \"{baseline.PackName}\" desta região: ele será ampliado, sem repetir imagens.");
+            }
+
             var builder = new AppPackBuilder(engine, journal.Log, journal.Progress);
-            var zip = await builder.BuildToFileAsync(options, token);
+            var zip = await builder.BuildToFileAsync(options, baseline, token);
             try
             {
                 journal.Log("Instalando e ativando o pack...");

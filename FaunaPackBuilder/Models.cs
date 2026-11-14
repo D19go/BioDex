@@ -76,6 +76,9 @@ public sealed class GbifVernacularName
 
     [JsonPropertyName("language")]
     public string? Language { get; set; }
+
+    [JsonPropertyName("preferred")]
+    public bool? Preferred { get; set; }
 }
 
 public sealed class GbifOccurrence
@@ -180,4 +183,5 @@ public sealed class PackBuildSettings
     public int MaxSpecies { get; set; }
     public int SearchPages { get; set; }
     public bool AllowBySa { get; set; }
+    public int ImagesPerSpecies { get; set; }
 }
