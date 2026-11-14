@@ -93,7 +93,7 @@ public sealed class FaunaPackManager
             return packs.FirstOrDefault(pack => pack.PackId == options.UpdatePackId);
 
         var region = string.IsNullOrWhiteSpace(options.StateProvince) ? BrazilRegions.WholeCountry : options.StateProvince;
-        return packs.FirstOrDefault(pack => pack.Region.Length > 0 && RegionPackPlanner.Same(pack.Region, region));
+        return packs.FirstOrDefault(pack => pack.Region.Length > 0 && BrazilRegions.Same(pack.Region, region));
     }
 
     public async Task<FaunaPackData> LoadAsync(
