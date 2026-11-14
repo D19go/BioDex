@@ -81,7 +81,11 @@ public sealed class PackBuildForegroundService : Service
             }
 
             var builder = new AppPackBuilder(engine, journal.Log, journal.Progress);
-            var zip = await builder.BuildToFileAsync(options, baseline, token);
+            // Checkpoints instalam o pack parcial: se a criação parar, o que já foi baixado continua no pack.
+            var zip = await builder.BuildToFileAsync(options, baseline, token, async path =>
+            {
+                await new FaunaPackManager().InstallAsync(path, CancellationToken.None);
+            });
             try
             {
                 journal.Log("Instalando e ativando o pack...");
@@ -106,7 +110,7 @@ public sealed class PackBuildForegroundService : Service
         catch (System.OperationCanceledException)
         {
             journal.Mutate(s => s.Status = "cancelled");
-            journal.Log("Criação cancelada.");
+            journal.Log("Criação cancelada. O que já foi baixado continua salvo no pack.");
         }
         catch (Exception ex)
         {
