@@ -96,10 +96,49 @@ public sealed class PackPropertiesActivity : Activity
             var count = entry.References.Count;
             var line = new TextView(this) { TextSize = 15 };
             line.Text = $"{name}\n{species.ScientificName} · {count} {(count == 1 ? "imagem" : "imagens")}";
-            line.SetPadding(0, 12, 0, 12);
+            line.SetPadding(0, 12, 0, 4);
             content!.AddView(line);
+            content.AddView(BuildReferenceRow(species.ImagePaths));
         }
     }
+
+    // Referências visuais da espécie, para comparar com a foto. Carregam em segundo plano.
+    LinearLayout BuildReferenceRow(IReadOnlyList<string> paths)
+    {
+        var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        row.SetPadding(0, 0, 0, 16);
+
+        foreach (var path in paths.Take(Models.Species.ShownReferenceImages))
+        {
+            var view = new ImageView(this);
+            view.SetBackgroundColor(Android.Graphics.Color.Rgb(238, 238, 238));
+            view.SetScaleType(ImageView.ScaleType.CenterCrop);
+            row.AddView(view, new LinearLayout.LayoutParams(0, Dp(120), 1f) { RightMargin = Dp(8) });
+            _ = LoadThumbnailAsync(path, view);
+        }
+
+        return row;
+    }
+
+    async Task LoadThumbnailAsync(string path, ImageView view)
+    {
+        var bitmap = await Task.Run(() =>
+        {
+            try
+            {
+                return ImageLoader.Load(path, 240);
+            }
+            catch
+            {
+                return null;
+            }
+        });
+
+        if (bitmap is not null)
+            view.SetImageBitmap(bitmap);
+    }
+
+    int Dp(int value) => (int)(value * Resources!.DisplayMetrics!.Density);
 
     void AddTitle(string text)
     {

@@ -82,7 +82,15 @@ public sealed class FaunaPackReader
 
         var counts = entries.Select(entry => entry.References.Count).ToList();
         var vectors = await ReadVectorsAsync(Path.Combine(packDirectory, manifest.EmbeddingFile), counts, manifest.ReferencesPerSpecies, cancellationToken);
-        for (var i = 0; i < entries.Count; i++) entries[i].Species.Embedding = Mean(vectors[i]);
+        for (var i = 0; i < entries.Count; i++)
+        {
+            entries[i].Species.Embedding = Mean(vectors[i]);
+            entries[i].Species.ImagePaths = entries[i].References
+                .Select(reference => Path.Combine(packDirectory, reference.File))
+                .Where(File.Exists)
+                .ToList();
+        }
+
         return new FaunaPackData(manifest, entries, packDirectory);
     }
 

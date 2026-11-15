@@ -26,6 +26,7 @@ public sealed class MainActivity : Activity
     static readonly TimeSpan RegionCheckInterval = TimeSpan.FromMinutes(10);
 
     ImageView? preview;
+    LinearLayout? matchImages;
     TextView? status;
     TextView? result;
     Button? identifyButton;
@@ -298,6 +299,10 @@ public sealed class MainActivity : Activity
         result = new TextView(this) { TextSize = 15 };
         result.SetPadding(0, 4, 0, 0);
         content.AddView(result);
+
+        matchImages = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        matchImages.SetPadding(0, 12, 0, 0);
+        content.AddView(matchImages);
 
         root.AddView(scroll, new LinearLayout.LayoutParams(-1, -1));
         SetContentView(root);
@@ -831,6 +836,32 @@ public sealed class MainActivity : Activity
         }
     }
 
+    // Mostra as imagens de referência do animal mais provável, só quando a identificação é confiante.
+    void ShowMatchImages(IReadOnlyList<SpeciesMatch> matches)
+    {
+        matchImages!.RemoveAllViews();
+        if (matches.Count == 0 || matches[0].Score < ResultFormatter.MinConfidentScore)
+            return;
+
+        foreach (var path in matches[0].Species.ImagePaths.Take(Species.ShownReferenceImages))
+        {
+            try
+            {
+                var view = new ImageView(this);
+                view.SetBackgroundColor(Color.Rgb(238, 238, 238));
+                view.SetScaleType(ImageView.ScaleType.CenterCrop);
+                view.SetImageBitmap(ImageLoader.Load(path, 320));
+
+                var layout = new LinearLayout.LayoutParams(0, Dp(160), 1f) { RightMargin = Dp(8) };
+                matchImages.AddView(view, layout);
+            }
+            catch
+            {
+                // Uma imagem que não abre não impede as outras nem o resultado.
+            }
+        }
+    }
+
     // Só identificações confiantes geram pontos (ou registro). Texto curto, adicionado ao resultado.
     static string ScoreNote(IReadOnlyList<SpeciesMatch> matches)
     {
@@ -877,6 +908,7 @@ public sealed class MainActivity : Activity
             var embedding = await Task.Run(() => engine.EncodeImage(imagePath));
             var matches = catalog.Search(embedding, 5);
             result!.Text = ResultFormatter.Format(matches) + ScoreNote(matches);
+            ShowMatchImages(matches);
             status!.Text = "Resultado offline concluído.";
 
             if (!string.IsNullOrWhiteSpace(endpoint))
