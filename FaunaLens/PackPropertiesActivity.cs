@@ -113,6 +113,7 @@ public sealed class PackPropertiesActivity : Activity
             var view = new ImageView(this);
             view.SetBackgroundColor(Android.Graphics.Color.Rgb(238, 238, 238));
             view.SetScaleType(ImageView.ScaleType.CenterCrop);
+            view.Click += (_, _) => StartActivity(ImageViewerActivity.CreateIntent(this, path));
             row.AddView(view, new LinearLayout.LayoutParams(0, Dp(120), 1f) { RightMargin = Dp(8) });
             _ = LoadThumbnailAsync(path, view);
         }

@@ -16,6 +16,7 @@ public sealed class FaunaPackManager
 {
     const string PreferencesName = "faunalens_packs";
     const string ActivePackKey = "active_pack_id";
+    const string EnabledPacksKey = "enabled_pack_ids";
 
     static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -36,6 +37,7 @@ public sealed class FaunaPackManager
             cancellationToken);
 
         SetActivePackId(pack.Manifest.PackId);
+        SetPackEnabled(pack.Manifest.PackId, true);
         return pack;
     }
 
@@ -111,6 +113,64 @@ public sealed class FaunaPackManager
         SetActivePackId(pack.Manifest.PackId);
         return pack;
     }
+
+    // Packs marcados para a identificação. Antes da primeira marcação, usa o pack ativo (ou o primeiro).
+    public async Task<IReadOnlySet<string>> GetEnabledPackIdsAsync(CancellationToken cancellationToken = default)
+    {
+        if (EnabledPreferences()?.Contains(EnabledPacksKey) != true)
+        {
+            var packs = await ListAsync(cancellationToken);
+            var active = GetActivePackId();
+            var first = packs.FirstOrDefault(pack => pack.PackId == active) ?? packs.FirstOrDefault();
+            if (first is not null)
+                SetPackEnabled(first.PackId, true);
+        }
+
+        return ReadEnabledIds();
+    }
+
+    public void SetPackEnabled(string packId, bool enabled)
+    {
+        var ids = ReadEnabledIds();
+        if (enabled)
+            ids.Add(packId);
+        else
+            ids.Remove(packId);
+
+        EnabledPreferences()?.Edit()?.PutString(EnabledPacksKey, string.Join("\n", ids))?.Apply();
+    }
+
+    // Carrega todos os packs marcados. Um pack inválido não impede os outros.
+    public async Task<List<FaunaPackData>> LoadEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        var enabled = await GetEnabledPackIdsAsync(cancellationToken);
+        var packs = await ListAsync(cancellationToken);
+        var output = new List<FaunaPackData>();
+
+        foreach (var pack in packs.Where(pack => enabled.Contains(pack.PackId)))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                output.Add(await reader.LoadInstalledAsync(pack.DirectoryPath, cancellationToken));
+            }
+            catch
+            {
+                // Pack inválido: a identificação segue com os outros.
+            }
+        }
+
+        return output;
+    }
+
+    HashSet<string> ReadEnabledIds()
+    {
+        var raw = EnabledPreferences()?.GetString(EnabledPacksKey, "") ?? "";
+        return raw.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+    }
+
+    Android.Content.ISharedPreferences? EnabledPreferences() =>
+        Android.App.Application.Context.GetSharedPreferences(PreferencesName, Android.Content.FileCreationMode.Private);
 
     public string? GetActivePackId()
     {

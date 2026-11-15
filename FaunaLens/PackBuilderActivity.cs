@@ -38,6 +38,7 @@ public sealed class PackBuilderActivity : Activity
     Button? cancelButton;
     ProgressBar? progress;
     TextView? statusText;
+    TextView? estimateText;
     TextView? logView;
     Handler? handler;
     string? updatePackId;
@@ -162,6 +163,17 @@ public sealed class PackBuilderActivity : Activity
         imagesSpinner = AddSpinner(content, "Imagens por espécie (até 50)", Labels(ImageOptions), IndexOf(ImageOptions, target?.ReferencesPerSpecies ?? 2, 0));
         pagesSpinner = AddSpinner(content, "Páginas de busca no GBIF (300 registros cada)", Labels(PageOptions), IndexOf(PageOptions, settings?.SearchPages ?? 10, 2));
 
+        estimateText = new TextView(this) { TextSize = 14 };
+        estimateText.SetPadding(0, 16, 0, 8);
+        content.AddView(estimateText);
+
+        // O tempo estimado é recalculado sempre que uma opção muda.
+        regionSpinner.ItemSelected += (_, _) => UpdateEstimate();
+        speciesSpinner.ItemSelected += (_, _) => UpdateEstimate();
+        imagesSpinner.ItemSelected += (_, _) => UpdateEstimate();
+        pagesSpinner.ItemSelected += (_, _) => UpdateEstimate();
+        UpdateEstimate();
+
         allowBySa = new CheckBox(this) { Text = "Aceitar CC BY-SA", Checked = settings?.AllowBySa ?? true };
         content.AddView(allowBySa);
 
@@ -188,6 +200,21 @@ public sealed class PackBuilderActivity : Activity
         spinner.SetSelection(selectedIndex);
         content.AddView(spinner);
         return spinner;
+    }
+
+    void UpdateEstimate()
+    {
+        if (estimateText is null || regionSpinner is null || speciesSpinner is null || imagesSpinner is null)
+            return;
+
+        var species = SpeciesOptions[speciesSpinner.SelectedItemPosition];
+        var images = ImageOptions[imagesSpinner.SelectedItemPosition];
+        var time = PackTimeEstimate.Estimate(species, images);
+        var region = Regions[regionSpinner.SelectedItemPosition];
+
+        estimateText.Text =
+            $"Tempo estimado: ≈ {PackTimeEstimate.Format(time)} · {species} espécies · {images} imagens por espécie · {region}.\n" +
+            "Estimativa provisória. Ampliar um pack existente costuma levar menos.";
     }
 
     static string[] Labels(int[] values) => values.Select(value => value.ToString()).ToArray();

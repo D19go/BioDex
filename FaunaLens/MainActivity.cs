@@ -27,6 +27,7 @@ public sealed class MainActivity : Activity
 
     ImageView? preview;
     LinearLayout? matchImages;
+    TextView? alternatives;
     TextView? status;
     TextView? result;
     Button? identifyButton;
@@ -38,7 +39,7 @@ public sealed class MainActivity : Activity
     readonly SpeciesCatalog catalog = new();
     readonly FaunaPackManager packManager = new();
     BioClipOnnxEngine? engine;
-    FaunaPackData? installedPack;
+    IReadOnlyList<FaunaPackData> installedPacks = Array.Empty<FaunaPackData>();
     Handler? uiHandler;
     Bitmap? previewBitmap;
     bool pollingDownload;
@@ -304,6 +305,10 @@ public sealed class MainActivity : Activity
         matchImages.SetPadding(0, 12, 0, 0);
         content.AddView(matchImages);
 
+        alternatives = new TextView(this) { TextSize = 15 };
+        alternatives.SetPadding(0, 12, 0, 0);
+        content.AddView(alternatives);
+
         root.AddView(scroll, new LinearLayout.LayoutParams(-1, -1));
         SetContentView(root);
     }
@@ -314,42 +319,15 @@ public sealed class MainActivity : Activity
         {
             // Packs e modelo de versões antigas passam para Download/BioDex (só quando há acesso).
             await Task.Run(ModelStorage.MigrateLegacyFolders);
-            Directory.CreateDirectory(FileSystem.PackDirectory);
-            var activeId = packManager.GetActivePackId();
-            string? selectedDirectory = null;
 
-            if (!string.IsNullOrWhiteSpace(activeId))
-            {
-                var candidate = System.IO.Path.Combine(FileSystem.PackDirectory, activeId);
-                if (Directory.Exists(candidate))
-                    selectedDirectory = candidate;
-            }
-
-            if (selectedDirectory is null)
-            {
-                selectedDirectory = Directory.GetDirectories(FileSystem.PackDirectory)
-                    .Select(path => new DirectoryInfo(path))
-                    .OrderByDescending(x => x.LastWriteTimeUtc)
-                    .Select(x => x.FullName)
-                    .FirstOrDefault();
-            }
-
-            // Sem FaunaPack, o app começa vazio: não há demonstração embutida no APK.
-            if (string.IsNullOrWhiteSpace(selectedDirectory))
-            {
-                installedPack = null;
-                catalog.Clear();
-                return;
-            }
-
-            var directory = selectedDirectory;
-            var pack = await Task.Run(() => packManager.LoadAsync(directory).GetAwaiter().GetResult());
-            installedPack = pack;
-            catalog.LoadPack(pack);
+            // Sem FaunaPack marcado, o app começa vazio: não há demonstração embutida no APK.
+            var packs = await packManager.LoadEnabledAsync();
+            installedPacks = packs;
+            catalog.LoadPacks(packs);
         }
         catch
         {
-            installedPack = null;
+            installedPacks = Array.Empty<FaunaPackData>();
             catalog.Clear();
         }
     }
@@ -360,9 +338,9 @@ public sealed class MainActivity : Activity
             ? "BioCLIP offline pronto."
             : "BioCLIP offline não instalado. Toque em “Baixar BioCLIP offline”.";
 
-        var packStatus = installedPack is null
+        var packStatus = installedPacks.Count == 0
             ? "Nenhum FaunaPack ativo. Crie um em “Criar FaunaPack por região” ou importe um .faunapack."
-            : $"FaunaPack ativo: {installedPack.Manifest.PackName} ({catalog.Count} espécies; {installedPack.Manifest.ReferencesPerSpecies} referência(s)/espécie).";
+            : $"FaunaPacks ativos: {installedPacks.Count} ({catalog.Count} espécies). Marque ou desmarque em “Gerenciar FaunaPacks”.";
 
         status!.Text = modelStatus + "\n" + packStatus;
     }
@@ -588,8 +566,7 @@ public sealed class MainActivity : Activity
             var pack = await Task.Run(
                 () => packManager.InstallAsync(temporaryPath).GetAwaiter().GetResult());
 
-            installedPack = pack;
-            catalog.LoadPack(pack);
+            await LoadCatalogOrInstalledPackAsync();
             UpdateEngineStatus();
 
             result!.Text =
@@ -616,17 +593,12 @@ public sealed class MainActivity : Activity
     {
         try
         {
-            var activeId = packManager.GetActivePackId();
-            if (string.IsNullOrWhiteSpace(activeId) || activeId == installedPack?.Manifest.PackId)
-                return;
-
-            var pack = (await packManager.ListAsync()).FirstOrDefault(x => x.PackId == activeId);
-            if (pack is not null)
-                await SelectPackAsync(pack);
+            await LoadCatalogOrInstalledPackAsync();
+            UpdateEngineStatus();
         }
         catch (Exception ex)
         {
-            result!.Text = $"Não foi possível trocar o FaunaPack: {ex.Message}";
+            result!.Text = $"Não foi possível carregar os FaunaPacks: {ex.Message}";
         }
     }
 
@@ -690,29 +662,6 @@ public sealed class MainActivity : Activity
         // Recria a tela para aplicar o tema. A foto aberta não é mantida nessa troca.
         AppSettings.SetThemeMode(mode);
         Recreate();
-    }
-
-    async Task SelectPackAsync(InstalledFaunaPack pack)
-    {
-        try
-        {
-            status!.Text = $"Carregando {pack.PackName}...";
-            var loaded = await Task.Run(
-                () => packManager.LoadAsync(pack.DirectoryPath).GetAwaiter().GetResult());
-
-            installedPack = loaded;
-            catalog.LoadPack(loaded);
-            result!.Text =
-                $"FaunaPack ativo: {loaded.Manifest.PackName}\n" +
-                $"Espécies carregadas: {loaded.Entries.Count}\n" +
-                $"Referências por espécie: {loaded.Manifest.ReferencesPerSpecies}";
-            UpdateEngineStatus();
-        }
-        catch (Exception ex)
-        {
-            result!.Text = $"Não foi possível carregar o FaunaPack: {ex.Message}";
-            UpdateEngineStatus();
-        }
     }
 
     void PickImage()
@@ -837,9 +786,11 @@ public sealed class MainActivity : Activity
     }
 
     // Mostra as imagens de referência do animal mais provável, só quando a identificação é confiante.
+    // Outras possibilidades ficam logo abaixo das fotos. Toque numa foto para abri-la em tamanho maior.
     void ShowMatchImages(IReadOnlyList<SpeciesMatch> matches)
     {
         matchImages!.RemoveAllViews();
+        alternatives!.Text = ResultFormatter.FormatAlternatives(matches);
         if (matches.Count == 0 || matches[0].Score < ResultFormatter.MinConfidentScore)
             return;
 
@@ -851,6 +802,7 @@ public sealed class MainActivity : Activity
                 view.SetBackgroundColor(Color.Rgb(238, 238, 238));
                 view.SetScaleType(ImageView.ScaleType.CenterCrop);
                 view.SetImageBitmap(ImageLoader.Load(path, 320));
+                view.Click += (_, _) => StartActivity(ImageViewerActivity.CreateIntent(this, path));
 
                 var layout = new LinearLayout.LayoutParams(0, Dp(160), 1f) { RightMargin = Dp(8) };
                 matchImages.AddView(view, layout);
@@ -907,7 +859,7 @@ public sealed class MainActivity : Activity
             var imagePath = pendingPath;
             var embedding = await Task.Run(() => engine.EncodeImage(imagePath));
             var matches = catalog.Search(embedding, 5);
-            result!.Text = ResultFormatter.Format(matches) + ScoreNote(matches);
+            result!.Text = ResultFormatter.Format(matches, includeAlternatives: false) + ScoreNote(matches);
             ShowMatchImages(matches);
             status!.Text = "Resultado offline concluído.";
 

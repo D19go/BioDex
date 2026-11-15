@@ -36,6 +36,33 @@ public sealed class SpeciesCatalog
         SourceName = pack.Manifest.PackName;
     }
 
+    // Vários packs ativos ao mesmo tempo. Uma espécie que aparece em mais de um pack vira uma entrada só:
+    // embedding médio e imagens dos dois.
+    public void LoadPacks(IEnumerable<FaunaPackData> packs)
+    {
+        var list = packs.ToList();
+        var byKey = new Dictionary<string, Species>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in list.SelectMany(pack => pack.Entries.Select(x => x.Species)))
+        {
+            var key = string.IsNullOrWhiteSpace(entry.ScientificName) ? entry.Id : entry.ScientificName;
+            if (!byKey.TryGetValue(key, out var existing))
+            {
+                byKey[key] = entry;
+                continue;
+            }
+
+            if (existing.Embedding.Length > 0 && existing.Embedding.Length == entry.Embedding.Length)
+                existing.Embedding = existing.Embedding.Zip(entry.Embedding, (a, b) => (a + b) / 2f).ToArray();
+
+            existing.ImagePaths = existing.ImagePaths.Concat(entry.ImagePaths).Distinct().ToList();
+        }
+
+        species.Clear();
+        species.AddRange(byKey.Values);
+        SourceName = string.Join(", ", list.Select(pack => pack.Manifest.PackName));
+    }
+
     public IReadOnlyList<SpeciesMatch> Search(float[] query, int count)
     {
         return species
