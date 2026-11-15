@@ -272,6 +272,10 @@ public sealed class MainActivity : Activity
         createPackButton.Click += (_, _) => StartPackBuilder();
         content.AddView(createPackButton);
 
+        var rankingButton = new Button(this) { Text = "🏆 Ranking (prévia)" };
+        rankingButton.Click += (_, _) => StartActivity(new Intent(this, typeof(RankingActivity)));
+        content.AddView(rankingButton);
+
         downloadModelButton = new Button(this) { Text = "Baixar BioCLIP offline" };
         downloadModelButton.Click += async (_, _) => await DownloadModelAsync();
         content.AddView(downloadModelButton);
@@ -827,6 +831,24 @@ public sealed class MainActivity : Activity
         }
     }
 
+    // Só identificações confiantes geram pontos (ou registro). Texto curto, adicionado ao resultado.
+    static string ScoreNote(IReadOnlyList<SpeciesMatch> matches)
+    {
+        if (matches.Count == 0 || matches[0].Score < ResultFormatter.MinConfidentScore)
+            return "";
+
+        var outcome = new ScoreStore().Record(matches[0].Species);
+        string message = outcome switch
+        {
+            { Risk: SpeciesRisk.Dangerous } => "Registrado. Faixa 1 (perigosa): não pontua, só fica no registro.",
+            { Risk: SpeciesRisk.Threatened } => "Registrado. Espécie ameaçada: não pontua.",
+            { AlreadyScored: true } => "Espécie já pontuou antes: sem pontos extras.",
+            _ => $"+{outcome.Awarded} pontos (valor provisório). Total: {outcome.Total}."
+        };
+
+        return "\n\nPONTUAÇÃO\n" + message;
+    }
+
     async Task IdentifyAsync()
     {
         if (engine?.IsReady != true || string.IsNullOrWhiteSpace(pendingPath))
@@ -854,7 +876,7 @@ public sealed class MainActivity : Activity
             var imagePath = pendingPath;
             var embedding = await Task.Run(() => engine.EncodeImage(imagePath));
             var matches = catalog.Search(embedding, 5);
-            result!.Text = ResultFormatter.Format(matches);
+            result!.Text = ResultFormatter.Format(matches) + ScoreNote(matches);
             status!.Text = "Resultado offline concluído.";
 
             if (!string.IsNullOrWhiteSpace(endpoint))
