@@ -19,7 +19,10 @@ public sealed class RankingActivity : Activity
         ("Diego (exemplo)", 40)
     };
 
+    sealed record Row(string Name, int Points, bool Mine);
+
     LinearLayout? list;
+    EditText? nameInput;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -32,6 +35,7 @@ public sealed class RankingActivity : Activity
     protected override void OnResume()
     {
         base.OnResume();
+        ScoreStore.Sync();
         Render();
     }
 
@@ -55,10 +59,22 @@ public sealed class RankingActivity : Activity
 
         list.AddView(new TextView(this)
         {
-            Text = "PRÉVIA: nomes e pontos dos outros são fictícios. A rede social ainda não existe; " +
-                   "a sua linha usa a pontuação real deste aparelho.",
+            Text = "PRÉVIA: os exemplos são fictícios. Os apps clones deste aparelho aparecem aqui " +
+                   "quando têm acesso a Download/BioDex. Cada app precisa de acesso separado.",
             TextSize = 13
         });
+
+        list.AddView(new TextView(this) { Text = "Seu nome no placar" });
+        nameInput = new EditText(this) { Text = ScoreStore.DisplayName };
+        list.AddView(nameInput);
+
+        var saveName = new Button(this) { Text = "Salvar nome" };
+        saveName.Click += (_, _) =>
+        {
+            ScoreStore.SetDisplayName(nameInput!.Text ?? "");
+            Render();
+        };
+        list.AddView(saveName);
 
         list.AddView(new TextView(this)
         {
@@ -69,18 +85,13 @@ public sealed class RankingActivity : Activity
             TextSize = 12
         });
 
-        var rows = SampleFriends
-            .Select(friend => (Name: friend.Name, Points: friend.Points, Mine: false))
-            .Append((Name: "Você", Points: ScoreStore.TotalPoints, Mine: true))
-            .OrderByDescending(row => row.Points)
-            .ToList();
-
+        var rows = BuildRows();
         for (var i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
             var view = new TextView(this)
             {
-                Text = $"{i + 1}. {row.Name} — {row.Points} pts",
+                Text = $"{i + 1}. {row.Name}{(row.Mine ? " (você)" : "")} — {row.Points} pts",
                 TextSize = 18
             };
             view.SetPadding(0, 16, 0, 16);
@@ -88,5 +99,23 @@ public sealed class RankingActivity : Activity
                 view.SetTypeface(null, Android.Graphics.TypefaceStyle.Bold);
             list.AddView(view);
         }
+    }
+
+    static List<Row> BuildRows()
+    {
+        var own = ScoreStore.PackageId;
+        var real = SharedScoreboard.Read()
+            .Select(entry => new Row(entry.Name, entry.Points, entry.Id == own))
+            .ToList();
+
+        // Sem acesso ao placar compartilhado, a própria linha vem da pontuação local.
+        if (!real.Any(row => row.Mine))
+            real.Add(new Row(ScoreStore.DisplayName, ScoreStore.TotalPoints, true));
+
+        return SampleFriends
+            .Select(friend => new Row(friend.Name, friend.Points, false))
+            .Concat(real)
+            .OrderByDescending(row => row.Points)
+            .ToList();
     }
 }

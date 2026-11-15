@@ -7,13 +7,16 @@ namespace FaunaLens.Services;
 // PreviousRecords: quantas vezes a espécie já tinha sido registrada antes desta identificação.
 public sealed record ScoreOutcome(string SpeciesKey, SpeciesRisk Risk, int Awarded, int PreviousRecords, int Total);
 
-// Pontuação local do usuário (prévia do ranking). Repetições pontuam cada vez menos;
+// Pontuação deste app (prévia do ranking). Repetições pontuam cada vez menos;
 // faixa 1 e ameaçadas são registradas, mas não pontuam.
+// Cada instalação grava a própria pontuação no placar compartilhado (SharedScoreboard), quando há acesso.
 public sealed class ScoreStore
 {
     const string PreferencesName = "faunalens_ranking";
     const string PointsKey = "points";
     const string CountsKey = "species_counts_v2";
+    const string NameKey = "display_name";
+    const string DefaultName = "Jogador";
 
     public static int TotalPoints
     {
@@ -29,6 +32,46 @@ public sealed class ScoreStore
             }
         }
     }
+
+    // Identifica esta instalação no placar: o pacote é único em cada clone (com.dsc.faunalens, ...1, ...2, ...3).
+    public static string PackageId => Application.Context.PackageName ?? "";
+
+    public static string DisplayName
+    {
+        get
+        {
+            try
+            {
+                var stored = ScoringPolicy.CleanName(Prefs()?.GetString(NameKey, null));
+                return stored.Length > 0 ? stored : DefaultName;
+            }
+            catch
+            {
+                return DefaultName;
+            }
+        }
+    }
+
+    public static void SetDisplayName(string name)
+    {
+        var clean = ScoringPolicy.CleanName(name);
+        if (clean.Length == 0)
+            return;
+
+        try
+        {
+            Prefs()?.Edit()?.PutString(NameKey, clean)?.Apply();
+        }
+        catch
+        {
+            // Sem preferências, o nome volta ao padrão na próxima abertura.
+        }
+
+        Sync();
+    }
+
+    // Garante que esta instalação aparece no placar compartilhado, mesmo sem pontos ainda.
+    public static void Sync() => SharedScoreboard.Publish(PackageId, DisplayName, TotalPoints);
 
     public ScoreOutcome Record(Species species)
     {
@@ -53,6 +96,7 @@ public sealed class ScoreStore
                 .PutString(CountsKey, WriteCounts(counts))!
                 .Apply();
 
+            SharedScoreboard.Publish(PackageId, DisplayName, total);
             return new ScoreOutcome(key, risk, awarded, previous, total);
         }
         catch

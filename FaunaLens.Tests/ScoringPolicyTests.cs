@@ -26,6 +26,14 @@ public sealed class ScoringPolicyTests
     }
 
     [Fact]
+    public void CleanNameTrimsCollapsesAndLimits()
+    {
+        Assert.Equal("Ana Maria", ScoringPolicy.CleanName("  Ana   Maria "));
+        Assert.Equal("", ScoringPolicy.CleanName(null));
+        Assert.True(ScoringPolicy.CleanName(new string('x', 50)).Length <= ScoringPolicy.MaxNameLength);
+    }
+
+    [Fact]
     public void FaixaUmAndThreatenedNeverScore()
     {
         Assert.Equal(0, ScoringPolicy.PointsFor(SpeciesRisk.Dangerous));

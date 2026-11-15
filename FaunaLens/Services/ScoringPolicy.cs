@@ -42,6 +42,15 @@ public static class ScoringPolicy
             : SpeciesRisk.Normal;
     }
 
+    public const int MaxNameLength = 20;
+
+    // Nome no placar: espaços normalizados e limite de tamanho.
+    public static string CleanName(string? name)
+    {
+        var collapsed = string.Join(" ", (name ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        return collapsed.Length > MaxNameLength ? collapsed[..MaxNameLength].TrimEnd() : collapsed;
+    }
+
     // Faixa 1 e ameaçada nunca pontuam, em nenhuma situação.
     public static int PointsFor(SpeciesRisk risk) => risk switch
     {
