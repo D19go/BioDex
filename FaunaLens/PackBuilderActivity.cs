@@ -252,7 +252,7 @@ public sealed class PackBuilderActivity : Activity
 
         if (!ModelStorage.HasAccess(this))
         {
-            ShowMessage("Libere o acesso a arquivos para usar o BioCLIP em Download/Biodex_Models.");
+            ShowMessage("Libere o acesso a arquivos para usar o BioCLIP em Download/BioDex/Biodex_Models.");
             ModelStorage.RequestAccess(this);
             return;
         }

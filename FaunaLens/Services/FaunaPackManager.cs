@@ -26,6 +26,9 @@ public sealed class FaunaPackManager
 
     public async Task<FaunaPackData> InstallAsync(string sourcePath, CancellationToken cancellationToken = default)
     {
+        if (!ModelStorage.HasAccess(Android.App.Application.Context))
+            throw new InvalidOperationException("Libere o acesso a arquivos para salvar o pack em Download/BioDex/FaunaPacks.");
+
         Directory.CreateDirectory(FileSystem.PackDirectory);
         var pack = await reader.InstallAsync(
             sourcePath,
@@ -38,6 +41,10 @@ public sealed class FaunaPackManager
 
     public async Task<IReadOnlyList<InstalledFaunaPack>> ListAsync(CancellationToken cancellationToken = default)
     {
+        // Sem acesso a Download/BioDex não há como ler os packs: a lista fica vazia em vez de quebrar a tela.
+        if (!ModelStorage.HasAccess(Android.App.Application.Context))
+            return Array.Empty<InstalledFaunaPack>();
+
         Directory.CreateDirectory(FileSystem.PackDirectory);
         var directories = Directory.GetDirectories(FileSystem.PackDirectory);
         var output = new List<InstalledFaunaPack>();

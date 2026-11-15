@@ -303,6 +303,8 @@ public sealed class MainActivity : Activity
     {
         try
         {
+            // Packs e modelo de versões antigas passam para Download/BioDex (só quando há acesso).
+            await Task.Run(ModelStorage.MigrateLegacyFolders);
             Directory.CreateDirectory(FileSystem.PackDirectory);
             var activeId = packManager.GetActivePackId();
             string? selectedDirectory = null;
@@ -397,7 +399,7 @@ public sealed class MainActivity : Activity
 
         if (!ModelStorage.HasAccess(this))
         {
-            status!.Text = "Libere o acesso a arquivos para salvar o BioCLIP em Download/Biodex_Models. Depois toque em \"Baixar BioCLIP offline\" de novo.";
+            status!.Text = "Libere o acesso a arquivos para salvar o BioCLIP em Download/BioDex/Biodex_Models. Depois toque em \"Baixar BioCLIP offline\" de novo.";
             ModelStorage.RequestAccess(this);
             return;
         }
@@ -500,7 +502,7 @@ public sealed class MainActivity : Activity
     {
         if (!ModelStorage.HasAccess(this))
         {
-            status!.Text = "Libere o acesso a arquivos para importar o modelo em Download/Biodex_Models.";
+            status!.Text = "Libere o acesso a arquivos para importar o modelo em Download/BioDex/Biodex_Models.";
             ModelStorage.RequestAccess(this);
             return;
         }

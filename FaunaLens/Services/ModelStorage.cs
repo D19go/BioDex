@@ -4,7 +4,7 @@ using Android.OS;
 
 namespace FaunaLens.Services;
 
-// Acesso à pasta Download/Biodex_Models (Android 11+ exige "acesso a todos os arquivos").
+// Acesso à pasta Download/BioDex (Android 11+ exige "acesso a todos os arquivos").
 public static class ModelStorage
 {
     public const int StorageRequest = 4107;
@@ -20,7 +20,7 @@ public static class ModelStorage
         }
     }
 
-    public static bool HasAccess(Activity activity)
+    public static bool HasAccess(Context context)
     {
         if (Build.VERSION.SdkInt >= BuildVersionCodes.R)
         {
@@ -29,7 +29,7 @@ public static class ModelStorage
 #pragma warning restore CA1416
         }
 
-        return activity.CheckSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE")
+        return context.CheckSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE")
             == Android.Content.PM.Permission.Granted;
     }
 
@@ -53,21 +53,57 @@ public static class ModelStorage
             StorageRequest);
     }
 
-    // Move o modelo (e um download parcial) da pasta privada antiga para Download/Biodex_Models.
-    // Falhas são ignoradas: o arquivo antigo continua no lugar e o download é refeito.
+    // Traz modelo e packs de versões anteriores para Download/BioDex. Só roda com acesso liberado.
+    // Falhas são ignoradas: o que não migrou continua na pasta antiga.
+    public static void MigrateLegacyFolders()
+    {
+        if (!HasAccess(Android.App.Application.Context))
+            return;
+
+        MigrateLegacyModels();
+        MigrateLegacyPacks();
+    }
+
+    // Move o modelo (e um download parcial) das pastas antigas para Download/BioDex/Biodex_Models.
     public static void MigrateLegacyModels()
     {
-        try
+        Try(() => MigrateFileIfNeeded(FileSystem.LegacyModelPath, FileSystem.ModelPath));
+        Try(() => MigrateFileIfNeeded(FileSystem.LegacyModelTempPath, FileSystem.ModelTempPath));
+        Try(() => MigrateFileIfNeeded(FileSystem.LegacyPublicModelPath, FileSystem.ModelPath));
+        Try(() => MigrateFileIfNeeded(FileSystem.LegacyPublicModelTempPath, FileSystem.ModelTempPath));
+    }
+
+    // Copia cada pack antigo (pasta privada) para Download/BioDex/FaunaPacks e só então apaga o antigo.
+    // Pack que já existe no destino não é sobrescrito.
+    public static void MigrateLegacyPacks()
+    {
+        var legacy = FileSystem.LegacyPackDirectory;
+        if (!Directory.Exists(legacy))
+            return;
+
+        var target = FileSystem.PackDirectory;
+        Directory.CreateDirectory(target);
+
+        foreach (var source in Directory.GetDirectories(legacy))
         {
-            MigrateIfNeeded(FileSystem.LegacyModelPath, FileSystem.ModelPath);
-            MigrateIfNeeded(FileSystem.LegacyModelTempPath, FileSystem.ModelTempPath);
-        }
-        catch
-        {
+            Try(() =>
+            {
+                var destination = Path.Combine(target, Path.GetFileName(source));
+                if (Directory.Exists(destination))
+                    return;
+
+                var copying = destination + ".copying";
+                if (Directory.Exists(copying))
+                    Directory.Delete(copying, true);
+
+                CopyDirectory(source, copying);
+                Directory.Move(copying, destination);
+                Directory.Delete(source, true);
+            });
         }
     }
 
-    static void MigrateIfNeeded(string legacyPath, string targetPath)
+    static void MigrateFileIfNeeded(string legacyPath, string targetPath)
     {
         if (!ModelLocation.ShouldMigrateLegacy(File.Exists(legacyPath), File.Exists(targetPath)))
             return;
@@ -77,5 +113,26 @@ public static class ModelStorage
         File.Copy(legacyPath, copying, true);
         File.Move(copying, targetPath, true);
         File.Delete(legacyPath);
+    }
+
+    static void CopyDirectory(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.GetFiles(source))
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
+        foreach (var directory in Directory.GetDirectories(source))
+            CopyDirectory(directory, Path.Combine(target, Path.GetFileName(directory)));
+    }
+
+    static void Try(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch
+        {
+            // Migração é best-effort: o item fica na pasta antiga e tenta de novo na próxima vez.
+        }
     }
 }
