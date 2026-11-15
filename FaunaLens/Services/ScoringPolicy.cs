@@ -49,4 +49,20 @@ public static class ScoringPolicy
         SpeciesRisk.Attention => PlaceholderAttentionPoints,
         _ => 0
     };
+
+    // PROVISÓRIO: cada repetição tira RepeatStepPoints, sem descer abaixo de MinimumPoints.
+    // Ex.: comum 10, 8, 6, 5, 5... Pode virar uma porcentagem fixa do valor base depois.
+    public const int RepeatStepPoints = 2;
+    public const int MinimumPoints = 5;
+
+    // previousRecords = quantas vezes a espécie já foi registrada antes desta vez (0 = primeiro registro).
+    public static int PointsForRepeat(SpeciesRisk risk, int previousRecords)
+    {
+        var basePoints = PointsFor(risk);
+        if (basePoints == 0)
+            return 0;
+
+        var points = basePoints - RepeatStepPoints * Math.Max(0, previousRecords);
+        return Math.Max(MinimumPoints, points);
+    }
 }

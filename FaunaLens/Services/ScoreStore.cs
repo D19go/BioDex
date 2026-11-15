@@ -4,15 +4,16 @@ using FaunaLens.Models;
 
 namespace FaunaLens.Services;
 
-public sealed record ScoreOutcome(string SpeciesKey, SpeciesRisk Risk, int Awarded, bool AlreadyScored, int Total);
+// PreviousRecords: quantas vezes a espécie já tinha sido registrada antes desta identificação.
+public sealed record ScoreOutcome(string SpeciesKey, SpeciesRisk Risk, int Awarded, int PreviousRecords, int Total);
 
-// Pontuação local do usuário (prévia do ranking). Cada espécie pontua uma vez;
+// Pontuação local do usuário (prévia do ranking). Repetições pontuam cada vez menos;
 // faixa 1 e ameaçadas são registradas, mas não pontuam.
 public sealed class ScoreStore
 {
     const string PreferencesName = "faunalens_ranking";
     const string PointsKey = "points";
-    const string ScoredKey = "scored_species_v1";
+    const string CountsKey = "species_counts_v2";
 
     public static int TotalPoints
     {
@@ -38,32 +39,47 @@ public sealed class ScoreStore
         {
             var preferences = Prefs();
             if (preferences is null)
-                return new ScoreOutcome(key, risk, 0, false, 0);
+                return new ScoreOutcome(key, risk, 0, 0, 0);
 
-            var scored = (preferences.GetString(ScoredKey, "") ?? "")
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var counts = ReadCounts(preferences);
+            counts.TryGetValue(key, out var previous);
 
-            var total = preferences.GetInt(PointsKey, 0);
-            if (scored.Contains(key))
-                return new ScoreOutcome(key, risk, 0, true, total);
-
-            var awarded = ScoringPolicy.PointsFor(risk);
-            scored.Add(key);
-            total += awarded;
+            var awarded = ScoringPolicy.PointsForRepeat(risk, previous);
+            var total = preferences.GetInt(PointsKey, 0) + awarded;
+            counts[key] = previous + 1;
 
             preferences.Edit()!
                 .PutInt(PointsKey, total)!
-                .PutString(ScoredKey, string.Join("\n", scored))!
+                .PutString(CountsKey, WriteCounts(counts))!
                 .Apply();
 
-            return new ScoreOutcome(key, risk, awarded, false, total);
+            return new ScoreOutcome(key, risk, awarded, previous, total);
         }
         catch
         {
-            return new ScoreOutcome(key, risk, 0, false, TotalPoints);
+            return new ScoreOutcome(key, risk, 0, 0, TotalPoints);
         }
     }
+
+    // Formato: uma linha por espécie, "nome<TAB>contagem".
+    static Dictionary<string, int> ReadCounts(ISharedPreferences preferences)
+    {
+        var counts = new Dictionary<string, int>();
+        var lines = (preferences.GetString(CountsKey, "") ?? "")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var line in lines)
+        {
+            var parts = line.Split('\t');
+            if (parts.Length == 2 && int.TryParse(parts[1], out var count))
+                counts[parts[0]] = count;
+        }
+
+        return counts;
+    }
+
+    static string WriteCounts(Dictionary<string, int> counts) =>
+        string.Join("\n", counts.Select(pair => $"{pair.Key}\t{pair.Value}"));
 
     static ISharedPreferences? Prefs() =>
         Application.Context.GetSharedPreferences(PreferencesName, FileCreationMode.Private);

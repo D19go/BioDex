@@ -64,7 +64,8 @@ public sealed class RankingActivity : Activity
         {
             Text = $"Pontuação provisória: comum {ScoringPolicy.PlaceholderNormalPoints} pts, " +
                    $"atenção {ScoringPolicy.PlaceholderAttentionPoints} pts. " +
-                   "Faixa 1 e ameaçadas: só registro, 0 pts. Cada espécie pontua uma vez.",
+                   "Faixa 1 e ameaçadas: só registro, 0 pts. Repetições valem " +
+                   $"{ScoringPolicy.RepeatStepPoints} pts a menos por vez, mínimo {ScoringPolicy.MinimumPoints} pts.",
             TextSize = 12
         });
 

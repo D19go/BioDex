@@ -33,6 +33,23 @@ public sealed class ScoringPolicyTests
     }
 
     [Fact]
+    public void RepeatsDecreaseStepByStepDownToMinimum()
+    {
+        Assert.Equal(10, ScoringPolicy.PointsForRepeat(SpeciesRisk.Normal, 0));
+        Assert.Equal(8, ScoringPolicy.PointsForRepeat(SpeciesRisk.Normal, 1));
+        Assert.Equal(6, ScoringPolicy.PointsForRepeat(SpeciesRisk.Normal, 2));
+        Assert.Equal(ScoringPolicy.MinimumPoints, ScoringPolicy.PointsForRepeat(SpeciesRisk.Normal, 3));
+        Assert.Equal(ScoringPolicy.MinimumPoints, ScoringPolicy.PointsForRepeat(SpeciesRisk.Normal, 50));
+    }
+
+    [Fact]
+    public void DangerousAndThreatenedStayAtZeroOnRepeats()
+    {
+        Assert.Equal(0, ScoringPolicy.PointsForRepeat(SpeciesRisk.Dangerous, 0));
+        Assert.Equal(0, ScoringPolicy.PointsForRepeat(SpeciesRisk.Threatened, 4));
+    }
+
+    [Fact]
     public void NormalAndAttentionScorePlaceholderValues()
     {
         Assert.Equal(ScoringPolicy.PlaceholderNormalPoints, ScoringPolicy.PointsFor(SpeciesRisk.Normal));

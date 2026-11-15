@@ -842,8 +842,8 @@ public sealed class MainActivity : Activity
         {
             { Risk: SpeciesRisk.Dangerous } => "Registrado. Faixa 1 (perigosa): não pontua, só fica no registro.",
             { Risk: SpeciesRisk.Threatened } => "Registrado. Espécie ameaçada: não pontua.",
-            { AlreadyScored: true } => "Espécie já pontuou antes: sem pontos extras.",
-            _ => $"+{outcome.Awarded} pontos (valor provisório). Total: {outcome.Total}."
+            { PreviousRecords: > 0 } => $"+{outcome.Awarded} pontos (registro nº {outcome.PreviousRecords + 1} desta espécie). Total: {outcome.Total}.",
+            _ => $"+{outcome.Awarded} pontos (primeiro registro, valor provisório). Total: {outcome.Total}."
         };
 
         return "\n\nPONTUAÇÃO\n" + message;
