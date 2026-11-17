@@ -1,5 +1,6 @@
 using Android.App;
 using Android.Content;
+using Android.Media;
 using Android.OS;
 
 namespace FaunaLens.Services;
@@ -60,8 +61,23 @@ public static class ModelStorage
         if (!HasAccess(Android.App.Application.Context))
             return;
 
+        Try(HideFromGallery);
         MigrateLegacyModels();
         MigrateLegacyPacks();
+    }
+
+    // As imagens de referência dos packs ficam em Download/BioDex. Sem ".nomedia", a galeria indexa todas elas.
+    // O marcador vale para a pasta e as subpastas; o scan faz a galeria esquecer as que já tinha indexado.
+    public static void HideFromGallery()
+    {
+        var root = ModelLocation.RootDirectory(PublicDownloadsDirectory);
+        Directory.CreateDirectory(root);
+
+        var marker = Path.Combine(root, ".nomedia");
+        if (!File.Exists(marker))
+            File.WriteAllText(marker, "");
+
+        MediaScannerConnection.ScanFile(Android.App.Application.Context, new[] { root }, null, null);
     }
 
     // Move o modelo (e um download parcial) das pastas antigas para Download/BioDex/Biodex_Models.
