@@ -93,7 +93,8 @@ jobs:
       - name: Instalar dependências (PyTorch só CPU)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # torch e torchvision do mesmo índice CPU: versões diferentes quebram o import (operator torchvision::nms).
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           python -m pip install open_clip_torch onnx onnxruntime numpy huggingface_hub
       - name: Exportar o encoder visual do BioCLIP 2
         working-directory: FaunaLens/tools
