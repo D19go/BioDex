@@ -265,7 +265,8 @@ public sealed class AppPackBuilder
             options.StateProvince,
             options.SearchPages,
             ct,
-            (page, total) => log($"  busca GBIF: página {page}/{total}"));
+            (page, total) => log($"  busca GBIF: página {page}/{total}"),
+            taxonKey: species.GbifTaxonKey);
 
         log($"  candidatos GBIF: {candidates.Count}");
 

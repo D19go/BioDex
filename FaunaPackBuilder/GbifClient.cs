@@ -28,9 +28,10 @@ public sealed class GbifClient : IDisposable
         string stateProvince,
         int maxPages,
         CancellationToken ct,
-        Action<int, int>? pageProgress = null)
+        Action<int, int>? pageProgress = null,
+        long taxonKey = 0)
     {
-        if (string.IsNullOrWhiteSpace(scientificName))
+        if (taxonKey <= 0 && string.IsNullOrWhiteSpace(scientificName))
             return new();
 
         const int pageSize = 300;
@@ -41,12 +42,19 @@ public sealed class GbifClient : IDisposable
         {
             ct.ThrowIfCancellationRequested();
             var offset = page * pageSize;
+            // Pela chave da espécie evita homônimos e nomes ambíguos. Sem chave, usa o nome científico.
+            var taxon = taxonKey > 0
+                ? $"?taxonKey={taxonKey}"
+                : $"?scientificName={Uri.EscapeDataString(scientificName)}";
             var url = $"{ApiRoot}/occurrence/search" +
-                      $"?scientificName={Uri.EscapeDataString(scientificName)}" +
+                      taxon +
                       $"&country={Uri.EscapeDataString(countryCode)}" +
                       (string.IsNullOrWhiteSpace(stateProvince) ? "" : $"&stateProvince={Uri.EscapeDataString(stateProvince)}") +
                       "&kingdom=Animalia" +
                       "&media_type=StillImage" +
+                      // Observações de pessoas e de câmeras: fica de fora o material de coleção (crânios, peles, espécimes).
+                      "&basisOfRecord=HUMAN_OBSERVATION" +
+                      "&basisOfRecord=MACHINE_OBSERVATION" +
                       "&occurrenceStatus=present" +
                       "&taxonRank=SPECIES" +
                       $"&limit={pageSize}&offset={offset}";
