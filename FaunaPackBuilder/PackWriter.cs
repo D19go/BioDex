@@ -38,6 +38,10 @@ public static class PackWriter
         var referencesPerSpecies = counts.Max();
 
         var packId = packIdOverride ?? Slug(packName);
+
+        // Dimensão do embedding vem dos próprios vetores (512 no BioCLIP v1, 768 no BioCLIP 2).
+        var dimension = species.SelectMany(item => item.Embeddings).Select(vector => vector.Length).FirstOrDefault(512);
+
         var manifest = new PackManifest
         {
             FormatVersion = formatVersion,
@@ -46,6 +50,7 @@ public static class PackWriter
             CreatedUtc = DateTime.UtcNow.ToString("O"),
             ReferencesPerSpecies = referencesPerSpecies,
             SpeciesCount = species.Count,
+            EmbeddingDimension = dimension,
             BuildSettings = buildSettings
         };
 
@@ -72,7 +77,7 @@ public static class PackWriter
             writer.Write(formatVersion);
             writer.Write(species.Count);
             writer.Write(referencesPerSpecies);
-            writer.Write(512);
+            writer.Write(dimension);
             foreach (var item in species)
                 foreach (var vector in item.Embeddings)
                     foreach (var value in vector)

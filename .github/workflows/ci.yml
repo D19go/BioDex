@@ -31,9 +31,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 0 = APK principal. Nas branches testes*, em vez dele são gerados 3 clones com pacotes numerados
-        # (com.dsc.faunalens1, 2 e 3), que podem ser instalados ao lado do principal.
-        clone: ${{ startsWith(github.ref_name, 'testes') && fromJSON('[1,2,3]') || fromJSON('[0]') }}
+        # 0 = APK principal. Nas branches testes* (menos testes_Super), em vez dele são gerados 3 clones com pacotes
+        # numerados (com.dsc.faunalens1, 2 e 3), que podem ser instalados ao lado do principal.
+        # testes_Super gera só o BioDex_Super (BioCLIP 2), sem clones.
+        clone: ${{ startsWith(github.ref_name, 'testes') && github.ref_name != 'testes_Super' && fromJSON('[1,2,3]') || fromJSON('[0]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -45,20 +46,29 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet workload install android
       - name: Compilar o APK
+        env:
+          IS_SUPER: ${{ github.ref_name == 'testes_Super' }}
         run: |
           EXTRA=""
-          if [ "${{ matrix.clone }}" -gt 0 ]; then
+          if [ "$IS_SUPER" = "true" ]; then
+            # "super" é palavra reservada em Java: o pacote usa "faunalens_super".
+            EXTRA="-p:BioDexVariant=super -p:ApplicationId=com.dsc.faunalens_super -p:ApplicationTitle=BioDex_Super"
+          elif [ "${{ matrix.clone }}" -gt 0 ]; then
             EXTRA="-p:ApplicationId=com.dsc.faunalens${{ matrix.clone }}"
           fi
           dotnet build FaunaLens/FaunaLens.csproj -c Release \
             -p:InstallAndroidDependencies=true \
             -p:AcceptAndroidSDKLicenses=True $EXTRA
       - name: Nomear o APK para publicação
+        env:
+          IS_SUPER: ${{ github.ref_name == 'testes_Super' }}
         run: |
           mkdir -p out
           APK=$(ls FaunaLens/bin/Release/net10.0-android/*-Signed.apk 2>/dev/null | head -n 1 || true)
           if [ -z "$APK" ]; then APK=$(ls FaunaLens/bin/Release/net10.0-android/*.apk | head -n 1); fi
-          if [ "${{ matrix.clone }}" -gt 0 ]; then
+          if [ "$IS_SUPER" = "true" ]; then
+            NAME="BioDex_Super.apk"
+          elif [ "${{ matrix.clone }}" -gt 0 ]; then
             NAME="BioDex-clone${{ matrix.clone }}.apk"
           else
             NAME="BioDex-debug.apk"
@@ -69,6 +79,29 @@ jobs:
         with:
           name: biodex-apk-${{ matrix.clone }}
           path: out/*.apk
+          if-no-files-found: error
+
+  modelo:
+    name: Exportar BioCLIP 2 para ONNX (BioDex_Super)
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'testes_Super'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências (PyTorch só CPU)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install open_clip_torch onnx onnxruntime numpy huggingface_hub
+      - name: Exportar o encoder visual do BioCLIP 2
+        working-directory: FaunaLens/tools
+        run: python export_model.py --model bioclip2 --output "$GITHUB_WORKSPACE/out/bioclip2_image.onnx"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: modelo-super
+          path: out/bioclip2_image.onnx
           if-no-files-found: error
 
   builder:
@@ -93,8 +126,9 @@ jobs:
 
   release:
     name: Publicar APK na aba Releases
-    needs: [testes, android, builder, python]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [testes, android, builder, python, modelo]
+    # modelo fica "skipped" fora da testes_Super; isso não bloqueia a publicação.
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.testes.result == 'success' && needs.android.result == 'success' && needs.builder.result == 'success' && needs.python.result == 'success' && (needs.modelo.result == 'success' || needs.modelo.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -102,11 +136,8 @@ jobs:
           pattern: biodex-apk-*
           path: apk
           merge-multiple: true
-      - name: Criar/atualizar a release "ultima-versao"
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Verificar assinatura dos APKs
         run: |
-          set -e
           echo "APKs gerados:"; ls -la apk
           APKSIGNER=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | tail -n 1 || true)
           for APK in apk/*.apk; do
@@ -117,6 +148,12 @@ jobs:
               echo "apksigner não encontrado; assinatura de $APK não verificada"
             fi
           done
+      - name: Criar/atualizar a release "ultima-versao"
+        if: github.ref_name != 'testes_Super'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
           gh release delete ultima-versao --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
           gh release create ultima-versao apk/*.apk \
             --repo "$GITHUB_REPOSITORY" \
@@ -124,3 +161,21 @@ jobs:
             --prerelease \
             --title "BioDex (build automático)" \
             --notes "APK gerado automaticamente a partir do commit $GITHUB_SHA (branch $GITHUB_REF_NAME). Só é publicado depois que os testes e as compilações passam. É um build de teste: instale e use por sua conta e risco. Os arquivos BioDex-clone1, 2 e 3 são cópias de teste com pacotes separados (com.dsc.faunalens1, 2 e 3) e podem ser instaladas junto com as demais."
+      - uses: actions/download-artifact@v4
+        if: github.ref_name == 'testes_Super'
+        with:
+          name: modelo-super
+          path: modelo
+      - name: Publicar BioDex_Super em "super-versao" (não mexe em ultima-versao)
+        if: github.ref_name == 'testes_Super'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          gh release delete super-versao --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create super-versao apk/BioDex_Super.apk modelo/bioclip2_image.onnx \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "BioDex_Super (BioCLIP 2, teste)" \
+            --notes "Build de teste BioDex_Super a partir do commit $GITHUB_SHA. Usa o BioCLIP 2 (768 dimensões) e packs próprios em FaunaPacks_Super. Não substitui nem remove os outros builds."

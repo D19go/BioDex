@@ -7,8 +7,18 @@ public static class ModelLocation
 {
     public const string RootFolderName = "BioDex";
     public const string ModelFolderName = "Biodex_Models";
+
+    // Variante BioDex_Super (build de teste com BioCLIP 2): modelo, dimensão e packs próprios,
+    // para não misturar com os packs e o modelo BioCLIP v1 das outras versões.
+#if SUPER
+    public const string PackFolderName = "FaunaPacks_Super";
+    public const string ModelFileName = "bioclip2_image.onnx";
+    public const int EmbeddingDimension = 768;
+#else
     public const string PackFolderName = "FaunaPacks";
     public const string ModelFileName = "bioclip_image.onnx";
+    public const int EmbeddingDimension = 512;
+#endif
 
     // Local usado nas versões anteriores (Download/Biodex_Models, direto em Download); usado só para migrar.
     public const string LegacyModelFolderName = "Biodex_Models";

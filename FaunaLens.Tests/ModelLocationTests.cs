@@ -35,6 +35,13 @@ public sealed class ModelLocationTests
     }
 
     [Fact]
+    public void DefaultBuildKeepsBioClipV1Dimension()
+    {
+        // Só a variante Super (SUPER) troca para 768 dimensões; o build padrão continua com 512.
+        Assert.Equal(512, ModelLocation.EmbeddingDimension);
+    }
+
+    [Fact]
     public void LegacyModelFolderIsDirectlyInDownloads()
     {
         Assert.Equal("/storage/emulated/0/Download/Biodex_Models", ModelLocation.LegacyModelDirectory(Downloads));

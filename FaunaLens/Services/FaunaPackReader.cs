@@ -11,7 +11,7 @@ public sealed class FaunaPackReader
 
     // 1: todas as espécies têm a mesma quantidade de imagens. 2: cada espécie tem a sua (pack parcial ou ampliado).
     const int MaxFormatVersion = 2;
-    const int ExpectedDimension = 512;
+    const int ExpectedDimension = ModelLocation.EmbeddingDimension;
     const long MaxExtractedBytes = 512L * 1024 * 1024;
     const int MaxSpecies = 5000;
     const int MaxReferencesPerSpecies = 200;
@@ -193,7 +193,7 @@ public sealed class FaunaPackReader
     static void ValidateManifest(FaunaPackManifest manifest)
     {
         if (manifest.FormatVersion is < 1 or > MaxFormatVersion) throw new InvalidDataException($"Versão de FaunaPack não suportada: {manifest.FormatVersion}.");
-        if (manifest.EmbeddingDimension != ExpectedDimension) throw new InvalidDataException("O FaunaPack não usa embeddings BioCLIP v1 de 512 dimensões.");
+        if (manifest.EmbeddingDimension != ExpectedDimension) throw new InvalidDataException($"O FaunaPack não usa embeddings de {ExpectedDimension} dimensões deste app.");
         if (manifest.ReferencesPerSpecies < 1 || manifest.ReferencesPerSpecies > MaxReferencesPerSpecies) throw new InvalidDataException("A quantidade de referências por espécie não é suportada.");
         if (!string.Equals(manifest.EmbeddingFile, "embeddings.bin", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Arquivo de embeddings não suportado pelo formato atual.");
         if (!string.Equals(manifest.ImageFolder, "images", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Pasta de imagens não suportada pelo formato atual.");

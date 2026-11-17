@@ -83,16 +83,25 @@ public static class ModelStorage
     // Move o modelo (e um download parcial) das pastas antigas para Download/BioDex/Biodex_Models.
     public static void MigrateLegacyModels()
     {
+#if SUPER
+        // A variante Super usa outro modelo (BioCLIP 2): o BioCLIP v1 antigo não pode ser copiado para o lugar dele.
+        return;
+#else
         Try(() => MigrateFileIfNeeded(FileSystem.LegacyModelPath, FileSystem.ModelPath));
         Try(() => MigrateFileIfNeeded(FileSystem.LegacyModelTempPath, FileSystem.ModelTempPath));
         Try(() => MigrateFileIfNeeded(FileSystem.LegacyPublicModelPath, FileSystem.ModelPath));
         Try(() => MigrateFileIfNeeded(FileSystem.LegacyPublicModelTempPath, FileSystem.ModelTempPath));
+#endif
     }
 
     // Copia cada pack antigo (pasta privada) para Download/BioDex/FaunaPacks e só então apaga o antigo.
     // Pack que já existe no destino não é sobrescrito.
     public static void MigrateLegacyPacks()
     {
+#if SUPER
+        // Packs antigos têm embeddings de 512 dimensões; a variante Super só usa os de 768.
+        return;
+#endif
         var legacy = FileSystem.LegacyPackDirectory;
         if (!Directory.Exists(legacy))
             return;

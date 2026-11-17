@@ -16,6 +16,11 @@
     <AndroidFastDeployment>false</AndroidFastDeployment>
   </PropertyGroup>
 
+  <!-- Build BioDex_Super (BioCLIP 2, 768 dimensões): dotnet build -p:BioDexVariant=super -->
+  <PropertyGroup Condition="'$(BioDexVariant)' == 'super'">
+    <DefineConstants>$(DefineConstants);SUPER</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
     <PackageReference Include="Xamarin.AndroidX.Core" Version="1.19.0.1" />

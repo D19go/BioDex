@@ -16,7 +16,6 @@ public sealed class AppPackBuilder
     const int ThumbnailSize = 512;
     const int ThumbnailQuality = 82;
     const int MinImageBytes = 5_000;
-    const int EmbeddingDimension = 512;
 
     // Salva o pack a cada N espécies processadas, para o progresso sobreviver a uma queda do app.
     const int CheckpointEverySpecies = 5;
@@ -324,7 +323,7 @@ public sealed class AppPackBuilder
                         var embedStarted = DateTime.UtcNow;
                         var vector = await Task.Run(() => engine.EncodeImage(localPath), ct);
                         var embedMs = (DateTime.UtcNow - embedStarted).TotalMilliseconds;
-                        if (vector.Length != EmbeddingDimension)
+                        if (vector.Length != ModelLocation.EmbeddingDimension)
                             throw new InvalidOperationException($"Embedding inesperado: {vector.Length} dimensões.");
 
                         entry.Embeddings.Add(vector);
