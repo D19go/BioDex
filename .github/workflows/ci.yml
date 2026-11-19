@@ -49,16 +49,16 @@ jobs:
         env:
           IS_SUPER: ${{ github.ref_name == 'testes_Super' }}
         run: |
-          EXTRA=""
+          ARGS=()
           if [ "$IS_SUPER" = "true" ]; then
-            # "super" é palavra reservada em Java: o pacote usa "faunalens_super".
-            EXTRA="-p:BioDexVariant=super -p:ApplicationId=com.dsc.faunalens_super -p:ApplicationTitle=BioDex_Super"
+            # "super" é palavra reservada em Java: o pacote usa "faunalens_super". O nome aparece como "Biodex Premium".
+            ARGS=("-p:BioDexVariant=super" "-p:ApplicationId=com.dsc.faunalens_super" "-p:ApplicationTitle=Biodex Premium")
           elif [ "${{ matrix.clone }}" -gt 0 ]; then
-            EXTRA="-p:ApplicationId=com.dsc.faunalens${{ matrix.clone }}"
+            ARGS=("-p:ApplicationId=com.dsc.faunalens${{ matrix.clone }}" "-p:ApplicationTitle=BioDex${{ matrix.clone }}")
           fi
           dotnet build FaunaLens/FaunaLens.csproj -c Release \
             -p:InstallAndroidDependencies=true \
-            -p:AcceptAndroidSDKLicenses=True $EXTRA
+            -p:AcceptAndroidSDKLicenses=True "${ARGS[@]}"
       - name: Nomear o APK para publicação
         env:
           IS_SUPER: ${{ github.ref_name == 'testes_Super' }}
@@ -67,7 +67,7 @@ jobs:
           APK=$(ls FaunaLens/bin/Release/net10.0-android/*-Signed.apk 2>/dev/null | head -n 1 || true)
           if [ -z "$APK" ]; then APK=$(ls FaunaLens/bin/Release/net10.0-android/*.apk | head -n 1); fi
           if [ "$IS_SUPER" = "true" ]; then
-            NAME="BioDex_Super.apk"
+            NAME="Biodex_Premium.apk"
           elif [ "${{ matrix.clone }}" -gt 0 ]; then
             NAME="BioDex-clone${{ matrix.clone }}.apk"
           else
@@ -174,9 +174,9 @@ jobs:
         run: |
           set -e
           gh release delete super-versao --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
-          gh release create super-versao apk/BioDex_Super.apk modelo/bioclip2_image.onnx \
+          gh release create super-versao apk/Biodex_Premium.apk modelo/bioclip2_image.onnx \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --prerelease \
-            --title "BioDex_Super (BioCLIP 2, teste)" \
-            --notes "Build de teste BioDex_Super a partir do commit $GITHUB_SHA. Usa o BioCLIP 2 (768 dimensões) e packs próprios em FaunaPacks_Super. Não substitui nem remove os outros builds."
+            --title "Biodex Premium (BioCLIP 2, teste)" \
+            --notes "Build de teste Biodex Premium a partir do commit $GITHUB_SHA. Usa o BioCLIP 2 (768 dimensões) e packs próprios em FaunaPacks_Super. Não substitui nem remove os outros builds."

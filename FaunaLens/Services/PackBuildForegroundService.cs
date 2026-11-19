@@ -64,12 +64,12 @@ public sealed class PackBuildForegroundService : Service
             });
 
             if (!File.Exists(FileSystem.ModelPath))
-                throw new InvalidOperationException("O BioCLIP ainda não está instalado. Baixe-o na tela principal primeiro.");
+                throw new InvalidOperationException($"O {AppIdentity.Model} ainda não está instalado. Baixe-o na tela principal primeiro.");
 
-            journal.Log("Carregando o BioCLIP...");
+            journal.Log($"Carregando o {AppIdentity.Model}...");
             using var engine = await Task.Run(() => new BioClipOnnxEngine(FileSystem.ModelPath), token);
             if (!engine.IsReady)
-                throw new InvalidOperationException("Não foi possível carregar o BioCLIP.");
+                throw new InvalidOperationException($"Não foi possível carregar o {AppIdentity.Model}.");
 
             // Se já existe um pack desta região (ou o escolhido para atualizar), ele é ampliado em vez de refeito.
             var baseline = await new FaunaPackManager().FindBaselineAsync(options, token);

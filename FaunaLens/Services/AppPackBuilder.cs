@@ -43,7 +43,7 @@ public sealed class AppPackBuilder
     {
         var options = requested.Normalized();
         if (!engine.IsReady)
-            throw new InvalidOperationException("O BioCLIP não está carregado.");
+            throw new InvalidOperationException($"O {AppIdentity.Model} não está carregado.");
 
         var buildRoot = Path.Combine(FileSystem.Root, "pack-build");
         var work = Path.Combine(buildRoot, Guid.NewGuid().ToString("N"));

@@ -23,7 +23,7 @@ public sealed class BioClipDownloadForegroundService : Service
     {
         base.OnCreate();
         CreateNotificationChannel();
-        StartForeground(NotificationId, BuildNotification("Preparando download do BioCLIP...", 0, false));
+        StartForeground(NotificationId, BuildNotification($"Preparando download do {AppIdentity.Model}...", 0, false));
     }
 
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
@@ -152,7 +152,7 @@ public sealed class BioClipDownloadForegroundService : Service
             "Downloads do Fauna Lens",
             NotificationImportance.Low)
         {
-            Description = "Progresso do download do modelo BioCLIP offline."
+            Description = $"Progresso do download do modelo {AppIdentity.Model} offline."
         });
     }
 
@@ -178,10 +178,10 @@ public sealed class BioClipDownloadForegroundService : Service
     {
         var text = state.Status switch
         {
-            "completed" => "BioCLIP offline instalado.",
+            "completed" => $"{AppIdentity.Model} offline instalado.",
             "paused" => "Download pausado. Será retomado depois.",
             "interrupted" => "Download interrompido. Abra o app para tentar novamente.",
-            _ => $"Baixando BioCLIP offline... {state.Percent}%"
+            _ => $"Baixando {AppIdentity.Model} offline... {state.Percent}%"
         };
 
         var notification = BuildNotification(text, state.Percent, state.TotalBytes <= 0 && state.Status is ("downloading" or "resuming"));

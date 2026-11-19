@@ -23,12 +23,12 @@ public sealed class BioClipDownloadService
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(url))
-            throw new InvalidOperationException("A URL do modelo BioCLIP não está configurada.");
+            throw new InvalidOperationException($"A URL do modelo {AppIdentity.Model} não está configurada.");
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out var modelUri) ||
             modelUri.Scheme is not ("https" or "http"))
         {
-            throw new InvalidOperationException("A URL do modelo BioCLIP é inválida.");
+            throw new InvalidOperationException($"A URL do modelo {AppIdentity.Model} é inválida.");
         }
 
         var directory = Path.GetDirectoryName(destinationPath);

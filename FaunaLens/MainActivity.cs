@@ -13,7 +13,8 @@ using Uri = Android.Net.Uri;
 
 namespace FaunaLens;
 
-[Activity(Label = "Fauna Lens", MainLauncher = true, Exported = true, ScreenOrientation = ScreenOrientation.Portrait)]
+// Sem Label: o nome do ícone vem do ApplicationTitle do build (Fauna Lens, BioDex1..3, Biodex Premium).
+[Activity(MainLauncher = true, Exported = true, ScreenOrientation = ScreenOrientation.Portrait)]
 public sealed class MainActivity : Activity
 {
     const int CameraRequest = 4101;
@@ -142,7 +143,7 @@ public sealed class MainActivity : Activity
             var modelPath = FileSystem.ModelPath;
             if (File.Exists(modelPath))
             {
-                status!.Text = "Carregando BioCLIP offline...";
+                status!.Text = $"Carregando {AppIdentity.Model} offline...";
                 var newEngine = await Task.Run(() => new BioClipOnnxEngine(modelPath));
                 engine?.Dispose();
                 engine = newEngine;
@@ -152,7 +153,7 @@ public sealed class MainActivity : Activity
         catch (Exception ex)
         {
             engineLoadFailed = true;
-            result!.Text = $"Não foi possível carregar o BioCLIP offline: {ex.Message}";
+            result!.Text = $"Não foi possível carregar o {AppIdentity.Model} offline: {ex.Message}";
         }
         finally
         {
@@ -170,7 +171,7 @@ public sealed class MainActivity : Activity
         {
             downloadModelButton!.Enabled = false;
             status!.Text = state.TotalBytes > 0
-                ? $"Baixando BioCLIP offline... {state.Percent}%"
+                ? $"Baixando {AppIdentity.Model} offline... {state.Percent}%"
                 : "Conectando ao servidor de download... pode levar alguns segundos.";
             return;
         }
@@ -188,8 +189,8 @@ public sealed class MainActivity : Activity
         if (state.Status == "paused" || state.Status == "interrupted")
         {
             status!.Text = File.Exists(FileSystem.ModelTempPath)
-                ? $"Download do BioCLIP interrompido em {state.Percent}%. Toque para retomar."
-                : "Download do BioCLIP interrompido. Toque para tentar novamente.";
+                ? $"Download do {AppIdentity.Model} interrompido em {state.Percent}%. Toque para retomar."
+                : $"Download do {AppIdentity.Model} interrompido. Toque para tentar novamente.";
             if (!string.IsNullOrWhiteSpace(state.Error))
                 result!.Text = state.Error;
         }
@@ -226,7 +227,7 @@ public sealed class MainActivity : Activity
 
         var subtitle = new TextView(this)
         {
-            Text = "Identificação de fauna com BioCLIP offline + BioCLIP 2 online",
+            Text = $"Identificação de fauna com {AppIdentity.Model} offline + {AppIdentity.Online} online",
             TextSize = 15,
             Gravity = GravityFlags.Center
         };
@@ -278,17 +279,17 @@ public sealed class MainActivity : Activity
         rankingButton.Click += (_, _) => StartActivity(new Intent(this, typeof(RankingActivity)));
         content.AddView(rankingButton);
 
-        downloadModelButton = new Button(this) { Text = "Baixar BioCLIP offline" };
+        downloadModelButton = new Button(this) { Text = $"Baixar {AppIdentity.Model} offline" };
         downloadModelButton.Click += async (_, _) => await DownloadModelAsync();
         content.AddView(downloadModelButton);
 
-        var importModelButton = new Button(this) { Text = "Importar BioCLIP ONNX" };
+        var importModelButton = new Button(this) { Text = $"Importar {AppIdentity.Model} ONNX" };
         importModelButton.Click += (_, _) => PickModel();
         content.AddView(importModelButton);
 
         endpointInput = new EditText(this)
         {
-            Hint = "Servidor BioCLIP 2 opcional (ex.: https://servidor)"
+            Hint = $"Servidor {AppIdentity.Online} opcional (ex.: https://servidor)"
         };
         endpointInput.Text = GetPreferences(FileCreationMode.Private)?.GetString("remote_endpoint", "") ?? "";
         content.AddView(endpointInput);
@@ -335,8 +336,8 @@ public sealed class MainActivity : Activity
     void UpdateEngineStatus()
     {
         var modelStatus = engine?.IsReady == true
-            ? "BioCLIP offline pronto."
-            : "BioCLIP offline não instalado. Toque em “Baixar BioCLIP offline”.";
+            ? $"{AppIdentity.Model} offline pronto."
+            : $"{AppIdentity.Model} offline não instalado. Toque em “Baixar {AppIdentity.Model} offline”.";
 
         var packStatus = installedPacks.Count == 0
             ? "Nenhum FaunaPack ativo. Crie um em “Criar FaunaPack por região” ou importe um .faunapack."
@@ -380,13 +381,13 @@ public sealed class MainActivity : Activity
     {
         if (engine?.IsReady == true)
         {
-            result!.Text = "BioCLIP offline já está instalado.";
+            result!.Text = $"{AppIdentity.Model} offline já está instalado.";
             return;
         }
 
         if (!ModelStorage.HasAccess(this))
         {
-            status!.Text = "Libere o acesso a arquivos para salvar o BioCLIP em Download/BioDex/Biodex_Models. Depois toque em \"Baixar BioCLIP offline\" de novo.";
+            status!.Text = $"Libere o acesso a arquivos para salvar o {AppIdentity.Model} em Download/BioDex/Biodex_Models. Depois toque em \"Baixar {AppIdentity.Model} offline\" de novo.";
             ModelStorage.RequestAccess(this);
             return;
         }
@@ -402,8 +403,8 @@ public sealed class MainActivity : Activity
 
         result!.Text = string.Empty;
         status!.Text = File.Exists(FileSystem.ModelTempPath)
-            ? "Retomando download do BioCLIP offline..."
-            : "Iniciando download do BioCLIP offline...";
+            ? $"Retomando download do {AppIdentity.Model} offline..."
+            : $"Iniciando download do {AppIdentity.Model} offline...";
 
         try
         {
@@ -574,7 +575,7 @@ public sealed class MainActivity : Activity
                 $"Pack: {pack.Manifest.PackName}\n" +
                 $"Espécies: {pack.Entries.Count}\n" +
                 $"Referências por espécie: {pack.Manifest.ReferencesPerSpecies}\n" +
-                "\nO BioCLIP offline agora pode comparar a foto com este pacote.";
+                $"\nO {AppIdentity.Model} offline agora pode comparar a foto com este pacote.";
         }
         finally
         {
@@ -683,7 +684,7 @@ public sealed class MainActivity : Activity
         identifyButton!.Enabled = true;
         status!.Text = engine?.IsReady == true
             ? $"{sourceText} pronta para identificação offline.\nCatálogo: {catalog.SourceName}."
-            : $"{sourceText} carregada. Baixe o BioCLIP offline para identificar.";
+            : $"{sourceText} carregada. Baixe o {AppIdentity.Model} offline para identificar.";
         result!.Text = string.Empty;
     }
 
@@ -729,7 +730,7 @@ public sealed class MainActivity : Activity
             try
             {
                 InstallModel(data.Data);
-                result!.Text = "BioCLIP offline instalado com sucesso.";
+                result!.Text = $"{AppIdentity.Model} offline instalado com sucesso.";
             }
             catch (Exception ex)
             {
@@ -836,7 +837,7 @@ public sealed class MainActivity : Activity
     {
         if (engine?.IsReady != true || string.IsNullOrWhiteSpace(pendingPath))
         {
-            result!.Text = "Baixe o BioCLIP offline e tire uma foto antes de identificar.";
+            result!.Text = $"Baixe o {AppIdentity.Model} offline e tire uma foto antes de identificar.";
             return;
         }
 
@@ -847,7 +848,7 @@ public sealed class MainActivity : Activity
         }
 
         identifyButton!.Enabled = false;
-        status!.Text = "Analisando foto com BioCLIP offline...";
+        status!.Text = $"Analisando foto com {AppIdentity.Model} offline...";
 
         try
         {
@@ -867,11 +868,11 @@ public sealed class MainActivity : Activity
             {
                 try
                 {
-                    status.Text = "Offline concluído. Consultando BioCLIP 2 online...";
+                    status.Text = $"Offline concluído. Consultando {AppIdentity.Online} online...";
                     var remote = await new RemoteIdentificationClient().IdentifyAsync(endpoint, imagePath);
                     if (remote is { Count: > 0 })
                     {
-                        result.Text += "\n\nONLINE — BioCLIP 2\n" + ResultFormatter.Format(remote);
+                        result.Text += $"\n\nONLINE — {AppIdentity.Online}\n" + ResultFormatter.Format(remote);
                         status.Text = "Resultado híbrido concluído.";
                     }
                     else
@@ -881,7 +882,7 @@ public sealed class MainActivity : Activity
                 }
                 catch
                 {
-                    status.Text = "Offline concluído; BioCLIP 2 online indisponível.";
+                    status.Text = $"Offline concluído; {AppIdentity.Online} online indisponível.";
                 }
             }
         }
