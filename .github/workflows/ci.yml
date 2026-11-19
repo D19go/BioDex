@@ -46,13 +46,14 @@ jobs:
       - run: dotnet workload install android
       - name: Compilar o APK
         run: |
-          EXTRA=""
+          ARGS=()
           if [ "${{ matrix.clone }}" -gt 0 ]; then
-            EXTRA="-p:ApplicationId=com.dsc.faunalens${{ matrix.clone }}"
+            # Nome do ícone e pacote próprios de cada clone: BioDex1, BioDex2, BioDex3.
+            ARGS=("-p:ApplicationId=com.dsc.faunalens${{ matrix.clone }}" "-p:ApplicationTitle=BioDex${{ matrix.clone }}")
           fi
           dotnet build FaunaLens/FaunaLens.csproj -c Release \
             -p:InstallAndroidDependencies=true \
-            -p:AcceptAndroidSDKLicenses=True $EXTRA
+            -p:AcceptAndroidSDKLicenses=True "${ARGS[@]}"
       - name: Nomear o APK para publicação
         run: |
           mkdir -p out

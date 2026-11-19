@@ -13,7 +13,8 @@ using Uri = Android.Net.Uri;
 
 namespace FaunaLens;
 
-[Activity(Label = "Fauna Lens", MainLauncher = true, Exported = true, ScreenOrientation = ScreenOrientation.Portrait)]
+// Sem Label: o nome do ícone vem do ApplicationTitle do build (Fauna Lens, BioDex1, BioDex2, BioDex3...).
+[Activity(MainLauncher = true, Exported = true, ScreenOrientation = ScreenOrientation.Portrait)]
 public sealed class MainActivity : Activity
 {
     const int CameraRequest = 4101;
