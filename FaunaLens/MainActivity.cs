@@ -588,24 +588,28 @@ public sealed class MainActivity : Activity
 
         var baseLayer = new GradientDrawable(
             GradientDrawable.Orientation.TopBottom,
-            new[] { Color.Rgb(0, 16, 6), Color.Rgb(0, 26, 8), Color.Rgb(0, 16, 6) });
+            new[] { Argb(255, 0, 16, 6), Argb(255, 0, 26, 8), Argb(255, 0, 16, 6) });
 
-        var layers = new Android.Graphics.Drawables.Drawable[]
+        var layers = new Drawable[]
         {
             baseLayer,
-            RadialGlow(0.5f, 0.2f, 0.6f, Color.Argb(60, 35, 130, 35)),
-            RadialGlow(0.0f, 0.5f, 0.5f, Color.Argb(40, 57, 185, 0)),
-            RadialGlow(1.0f, 0.8f, 0.5f, Color.Argb(40, 32, 230, 0)),
+            RadialGlow(0.5f, 0.2f, 0.6f, 60, 35, 130, 35),
+            RadialGlow(0.0f, 0.5f, 0.5f, 40, 57, 185, 0),
+            RadialGlow(1.0f, 0.8f, 0.5f, 40, 32, 230, 0),
         };
 
-        view.SetBackground(new Android.Graphics.Drawables.LayerDrawable(layers));
+        view.Background = new LayerDrawable(layers);
     }
 
-    GradientDrawable RadialGlow(float centerX, float centerY, float relativeRadius, Color color)
+    // Cor ARGB em inteiro, o formato que o GradientDrawable aceita.
+    static int Argb(int alpha, int red, int green, int blue) =>
+        (alpha << 24) | (red << 16) | (green << 8) | blue;
+
+    GradientDrawable RadialGlow(float centerX, float centerY, float relativeRadius, int alpha, int red, int green, int blue)
     {
         var glow = new GradientDrawable();
-        glow.SetGradientType(GradientDrawable.GradientType.RadialGradient);
-        glow.SetColors(new[] { color, Color.Argb(0, color.R, color.G, color.B) });
+        glow.SetGradientType(Android.Graphics.Drawables.GradientType.RadialGradient);
+        glow.SetColors(new[] { Argb(alpha, red, green, blue), Argb(0, red, green, blue) });
         glow.SetGradientCenter(centerX, centerY);
         // O raio do gradiente é em pixels: a referência é a largura da tela.
         glow.SetGradientRadius(Resources!.DisplayMetrics!.WidthPixels * relativeRadius);
