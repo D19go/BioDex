@@ -23,7 +23,8 @@
 
   <ItemGroup>
     <AndroidResource Include="Resources\xml\file_paths.xml" />
-    <AndroidResource Include="Resources\drawable\ic_launcher.xml" />
+    <AndroidResource Include="Resources\drawable\ic_launcher.png" />
+    <AndroidResource Include="Resources\drawable\logo_biodex.png" />
   </ItemGroup>
   <ItemGroup>
     <!-- Lógica compartilhada com o FaunaPack Builder (sem dependências de Windows). -->
