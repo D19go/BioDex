@@ -1,7 +1,6 @@
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
-using Android.Content.Res;
 using Android.Graphics;
 using Android.OS;
 using Android.Provider;
@@ -436,7 +435,7 @@ public sealed class MainActivity : Activity
     }
 
     // Cores do HUD, seguindo a especificação: verde-escuro com verde luminoso no escuro; claro no tema claro.
-    bool IsDarkMode => (Resources!.Configuration!.UiMode & UiMode.NightMask) == UiMode.NightYes;
+    bool IsDarkMode => (Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes;
     Color HudCard => IsDarkMode ? Color.Rgb(0, 29, 10) : Color.Rgb(255, 255, 255);
     Color HudGreen => Color.Rgb(32, 230, 0);
     Color HudText => IsDarkMode ? Color.Rgb(245, 245, 245) : Color.Rgb(16, 24, 16);
