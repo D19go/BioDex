@@ -197,7 +197,7 @@ public sealed class FaunaPackReader
         if (manifest.ReferencesPerSpecies < 1 || manifest.ReferencesPerSpecies > MaxReferencesPerSpecies) throw new InvalidDataException("A quantidade de referências por espécie não é suportada.");
         if (!string.Equals(manifest.EmbeddingFile, "embeddings.bin", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Arquivo de embeddings não suportado pelo formato atual.");
         if (!string.Equals(manifest.ImageFolder, "images", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Pasta de imagens não suportada pelo formato atual.");
-        if (!manifest.EmbeddingModel.Contains("BioCLIP", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("O modelo de embeddings do pack não é compatível com este Fauna Lens.");
+        if (!manifest.EmbeddingModel.Contains("BioCLIP", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("O modelo de embeddings do pack não é compatível com este Biodex.");
     }
 
     static string SanitizePackId(string value)

@@ -19,7 +19,7 @@ public sealed class GbifClient : IDisposable
     public GbifClient()
     {
         client = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("FaunaPackBuilder/1.2 (Fauna Lens)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("FaunaPackBuilder/1.2 (Biodex)");
     }
 
     public async Task<List<GbifOccurrence>> SearchImagesAsync(

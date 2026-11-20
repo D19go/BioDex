@@ -5,7 +5,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>FaunaLens</RootNamespace>
     <ApplicationId>com.dsc.faunalens</ApplicationId>
-    <ApplicationTitle>Fauna Lens</ApplicationTitle>
+    <ApplicationTitle>Biodex</ApplicationTitle>
     <ApplicationDisplayVersion>0.6.4</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <Nullable>enable</Nullable>

@@ -12,7 +12,7 @@ from PIL import Image
 MODEL_ID = os.environ.get("FAUNA_MODEL", "hf-hub:imageomics/bioclip-2")
 CATALOG = Path(os.environ.get("FAUNA_CATALOG", "data/pampa_species_online.json"))
 
-app = FastAPI(title="Fauna Lens API", version="0.2.0")
+app = FastAPI(title="Biodex API", version="0.2.0")
 
 model, _, preprocess = open_clip.create_model_and_transforms(MODEL_ID)
 model.eval()

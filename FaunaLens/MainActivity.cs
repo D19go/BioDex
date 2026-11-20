@@ -2,6 +2,7 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.Graphics;
+using Android.Graphics.Drawables;
 using Android.OS;
 using Android.Provider;
 using Android.Views;
@@ -13,7 +14,7 @@ using Uri = Android.Net.Uri;
 
 namespace FaunaLens;
 
-// Sem Label: o nome do ícone vem do ApplicationTitle do build (Fauna Lens, BioDex1, BioDex2, BioDex3...).
+// Sem Label: o nome do ícone vem do ApplicationTitle do build (Biodex, BioDex1, BioDex2, BioDex3...).
 [Activity(MainLauncher = true, Exported = true, ScreenOrientation = ScreenOrientation.Portrait)]
 public sealed class MainActivity : Activity
 {
@@ -220,7 +221,7 @@ public sealed class MainActivity : Activity
 
         // Tela principal (HUD): cabeçalho de ponta a ponta (avatar, logo e pontuação) e feed de exemplo.
         var page = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        ApplyWindowBackground(page);
+        ApplyHudBackground(page);
         page.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(0, 0));
 
         var header = new LinearLayout(this) { Orientation = Orientation.Horizontal };
@@ -266,7 +267,7 @@ public sealed class MainActivity : Activity
 
         // Painel da lupa: foto, identificação e resultados.
         identifyOverlay = new LinearLayout(this) { Orientation = Orientation.Vertical, Visibility = ViewStates.Gone };
-        ApplyWindowBackground(identifyOverlay);
+        ApplyHudBackground(identifyOverlay);
         identifyOverlay.SetPadding(Dp(16), Dp(12), Dp(16), Dp(16));
         identifyOverlay.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(16, 12));
 
@@ -345,13 +346,13 @@ public sealed class MainActivity : Activity
         frame.AddView(drawerScrim, new FrameLayout.LayoutParams(-1, -1));
 
         drawerPanel = new LinearLayout(this) { Orientation = Orientation.Vertical, Visibility = ViewStates.Gone };
-        ApplyWindowBackground(drawerPanel);
+        ApplyHudBackground(drawerPanel);
         drawerPanel.SetPadding(Dp(16), Dp(24), Dp(16), Dp(16));
         drawerPanel.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(16, 24));
 
         var drawerHeader = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         drawerHeader.SetGravity(GravityFlags.CenterVertical);
-        var brand = new TextView(this) { Text = "Fauna Lens", TextSize = 22 };
+        var brand = new TextView(this) { Text = "Biodex", TextSize = 22 };
         brand.SetTypeface(null, TypefaceStyle.Bold);
         drawerHeader.AddView(brand, new LinearLayout.LayoutParams(0, -2, 1f));
         var closeDrawer = new Button(this) { Text = "✕" };
@@ -573,6 +574,42 @@ public sealed class MainActivity : Activity
             view.SetBackgroundResource(typed.ResourceId);
         else
             view.SetBackgroundColor(new Color(typed.Data));
+    }
+
+    // Fundo do HUD no modo escuro: gradiente vertical (#001006 → #001A08 → #001006) com brilhos verdes suaves,
+    // traduzidos do CSS do projeto. No modo claro mantém o fundo do tema.
+    void ApplyHudBackground(View view)
+    {
+        if (!IsDarkMode)
+        {
+            ApplyWindowBackground(view);
+            return;
+        }
+
+        var baseLayer = new GradientDrawable(
+            GradientDrawable.Orientation.TopBottom,
+            new[] { Color.Rgb(0, 16, 6), Color.Rgb(0, 26, 8), Color.Rgb(0, 16, 6) });
+
+        var layers = new Android.Graphics.Drawables.Drawable[]
+        {
+            baseLayer,
+            RadialGlow(0.5f, 0.2f, 0.6f, Color.Argb(60, 35, 130, 35)),
+            RadialGlow(0.0f, 0.5f, 0.5f, Color.Argb(40, 57, 185, 0)),
+            RadialGlow(1.0f, 0.8f, 0.5f, Color.Argb(40, 32, 230, 0)),
+        };
+
+        view.SetBackground(new Android.Graphics.Drawables.LayerDrawable(layers));
+    }
+
+    GradientDrawable RadialGlow(float centerX, float centerY, float relativeRadius, Color color)
+    {
+        var glow = new GradientDrawable();
+        glow.SetGradientType(GradientDrawable.GradientType.RadialGradient);
+        glow.SetColors(new[] { color, Color.Argb(0, color.R, color.G, color.B) });
+        glow.SetGradientCenter(centerX, centerY);
+        // O raio do gradiente é em pixels: a referência é a largura da tela.
+        glow.SetGradientRadius(Resources!.DisplayMetrics!.WidthPixels * relativeRadius);
+        return glow;
     }
 
     async Task LoadCatalogOrInstalledPackAsync()

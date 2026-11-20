@@ -219,7 +219,7 @@ public sealed class PackBuildForegroundService : Service
     Notification BuildNotification(string text, int progress, bool indeterminate, bool ongoing)
     {
         var builder = new NotificationCompat.Builder(this, ChannelId)
-            .SetContentTitle("Fauna Lens")
+            .SetContentTitle("Biodex")
             .SetContentText(text)
             .SetSmallIcon(Android.Resource.Drawable.IcMenuGallery)
             .SetOngoing(ongoing)

@@ -149,7 +149,7 @@ public sealed class BioClipDownloadForegroundService : Service
         var manager = (NotificationManager?)GetSystemService(NotificationService);
         manager?.CreateNotificationChannel(new NotificationChannel(
             ChannelId,
-            "Downloads do Fauna Lens",
+            "Downloads do Biodex",
             NotificationImportance.Low)
         {
             Description = "Progresso do download do modelo BioCLIP offline."
@@ -159,7 +159,7 @@ public sealed class BioClipDownloadForegroundService : Service
     Notification BuildNotification(string text, int progress, bool indeterminate)
     {
         var builder = new NotificationCompat.Builder(this, ChannelId)
-            .SetContentTitle("Fauna Lens")
+            .SetContentTitle("Biodex")
             .SetContentText(text)
             .SetSmallIcon(Android.Resource.Drawable.IcMenuGallery)
             .SetOngoing(true)

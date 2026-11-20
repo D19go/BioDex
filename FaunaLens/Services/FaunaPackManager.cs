@@ -199,7 +199,7 @@ public sealed class FaunaPackManager
         var root = Path.GetFullPath(FileSystem.PackDirectory) + Path.DirectorySeparatorChar;
 
         if (!fullDirectory.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("O pacote está fora da pasta de instalação do FaunaLens.");
+            throw new InvalidOperationException("O pacote está fora da pasta de instalação do Biodex.");
 
         Directory.Delete(fullDirectory, true);
 
