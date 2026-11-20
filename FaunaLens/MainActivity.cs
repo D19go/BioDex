@@ -29,7 +29,14 @@ public sealed class MainActivity : Activity
     ImageView? preview;
     LinearLayout? matchImages;
     TextView? alternatives;
-    TextView? status;
+    MirroredStatus? status;
+    TextView? identifyStatus;
+    TextView? drawerStatus;
+    Button? pointsChip;
+    Button? searchButton;
+    LinearLayout? identifyOverlay;
+    LinearLayout? drawerPanel;
+    View? drawerScrim;
     TextView? result;
     Button? identifyButton;
     Button? downloadModelButton;
@@ -72,6 +79,7 @@ public sealed class MainActivity : Activity
     protected override void OnResume()
     {
         base.OnResume();
+        RefreshPoints();
         RefreshDownloadState();
         StartDownloadPolling();
         CheckPackBuildResult();
@@ -208,34 +216,128 @@ public sealed class MainActivity : Activity
 
     void BuildUi()
     {
-        var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        root.SetPadding(32, 24, 32, 24);
-        root.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(32, 24));
+        var frame = new FrameLayout(this);
 
-        var scroll = new ScrollView(this);
-        var content = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        scroll.AddView(content);
+        // Tela principal (HUD): avatar à esquerda (abre o painel), logo no centro e pontos à direita (ranking).
+        var page = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        page.SetPadding(Dp(16), Dp(12), Dp(16), Dp(16));
+        page.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(16, 12));
 
-        var title = new TextView(this)
+        var hud = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        hud.SetGravity(GravityFlags.CenterVertical);
+
+        var avatar = new Button(this) { Text = "👤" };
+        avatar.Click += (_, _) => OpenDrawer();
+        hud.AddView(avatar, new LinearLayout.LayoutParams(Dp(56), Dp(56)));
+
+        var logo = new ImageView(this);
+        logo.SetImageResource(Resource.Drawable.logo_biodex);
+        logo.SetScaleType(ImageView.ScaleType.FitCenter);
+        hud.AddView(logo, new LinearLayout.LayoutParams(0, Dp(56), 1f));
+
+        pointsChip = new Button(this);
+        pointsChip.Click += (_, _) => StartActivity(new Intent(this, typeof(RankingActivity)));
+        hud.AddView(pointsChip, new LinearLayout.LayoutParams(-2, -2));
+        page.AddView(hud, new LinearLayout.LayoutParams(-1, -2));
+
+        var home = new TextView(this)
         {
-            Text = "Fauna Lens",
-            TextSize = 28,
+            Text = "Toque na lupa para identificar um animal.\n\nO feed dos amigos entra aqui depois.",
+            TextSize = 16,
             Gravity = GravityFlags.Center
         };
-        title.SetTypeface(null, TypefaceStyle.Bold);
-        content.AddView(title, new LinearLayout.LayoutParams(-1, -2));
+        home.SetPadding(Dp(24), Dp(48), Dp(24), 0);
+        page.AddView(home, new LinearLayout.LayoutParams(-1, 0, 1f));
+        frame.AddView(page, new FrameLayout.LayoutParams(-1, -1));
 
-        var subtitle = new TextView(this)
+        // Painel da lupa: foto, identificação e resultados.
+        identifyOverlay = new LinearLayout(this) { Orientation = Orientation.Vertical, Visibility = ViewStates.Gone };
+        ApplyWindowBackground(identifyOverlay);
+        identifyOverlay.SetPadding(Dp(16), Dp(12), Dp(16), Dp(16));
+        identifyOverlay.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(16, 12));
+
+        var closeIdentify = new Button(this) { Text = "✕ Fechar" };
+        closeIdentify.Click += (_, _) => SetIdentifyOpen(false);
+        identifyOverlay.AddView(closeIdentify, new LinearLayout.LayoutParams(-2, -2));
+
+        var identifyScroll = new ScrollView(this);
+        var identifyContent = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        identifyScroll.AddView(identifyContent);
+        identifyOverlay.AddView(identifyScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        preview = new ImageView(this);
+        preview.SetBackgroundColor(Color.Rgb(238, 238, 238));
+        preview.SetScaleType(ImageView.ScaleType.FitCenter);
+        identifyContent.AddView(preview, new LinearLayout.LayoutParams(-1, Dp(300)));
+
+        var camera = new Button(this) { Text = "Tirar foto" };
+        camera.Click += (_, _) => TakePhoto();
+        identifyContent.AddView(camera);
+
+        var gallery = new Button(this) { Text = "Escolher da galeria" };
+        gallery.Click += (_, _) => PickImage();
+        identifyContent.AddView(gallery);
+
+        identifyButton = new Button(this) { Text = "Identificar" };
+        identifyButton.Enabled = false;
+        identifyButton.Click += async (_, _) => await IdentifyAsync();
+        identifyContent.AddView(identifyButton);
+
+        identifyStatus = new TextView(this) { TextSize = 13 };
+        identifyStatus.SetPadding(0, 12, 0, 4);
+        identifyContent.AddView(identifyStatus);
+
+        result = new TextView(this) { TextSize = 15 };
+        result.SetPadding(0, 4, 0, 0);
+        identifyContent.AddView(result);
+
+        matchImages = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        matchImages.SetPadding(0, 12, 0, 0);
+        identifyContent.AddView(matchImages);
+
+        alternatives = new TextView(this) { TextSize = 15 };
+        alternatives.SetPadding(0, 12, 0, 0);
+        identifyContent.AddView(alternatives);
+        frame.AddView(identifyOverlay, new FrameLayout.LayoutParams(-1, -1));
+
+        // Botão de lupa flutuante: abre o painel de identificação.
+        searchButton = new Button(this) { Text = "🔍" };
+        searchButton.Click += (_, _) => SetIdentifyOpen(true);
+        frame.AddView(searchButton, new FrameLayout.LayoutParams(Dp(64), Dp(64), GravityFlags.End | GravityFlags.Bottom)
         {
-            Text = "Identificação de fauna com BioCLIP offline + BioCLIP 2 online",
-            TextSize = 15,
-            Gravity = GravityFlags.Center
-        };
-        content.AddView(subtitle, new LinearLayout.LayoutParams(-1, -2));
+            RightMargin = Dp(20),
+            BottomMargin = Dp(24)
+        });
 
+        // Painel lateral (ao tocar no avatar): tema, packs e modelo offline.
+        drawerScrim = new View(this) { Visibility = ViewStates.Gone };
+        drawerScrim.SetBackgroundColor(Color.Argb(110, 0, 0, 0));
+        drawerScrim.Click += (_, _) => CloseDrawer();
+        frame.AddView(drawerScrim, new FrameLayout.LayoutParams(-1, -1));
+
+        drawerPanel = new LinearLayout(this) { Orientation = Orientation.Vertical, Visibility = ViewStates.Gone };
+        ApplyWindowBackground(drawerPanel);
+        drawerPanel.SetPadding(Dp(16), Dp(24), Dp(16), Dp(16));
+        drawerPanel.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(16, 24));
+
+        var drawerHeader = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        drawerHeader.SetGravity(GravityFlags.CenterVertical);
+        var brand = new TextView(this) { Text = "Fauna Lens", TextSize = 22 };
+        brand.SetTypeface(null, TypefaceStyle.Bold);
+        drawerHeader.AddView(brand, new LinearLayout.LayoutParams(0, -2, 1f));
+        var closeDrawer = new Button(this) { Text = "✕" };
+        closeDrawer.Click += (_, _) => CloseDrawer();
+        drawerHeader.AddView(closeDrawer, new LinearLayout.LayoutParams(-2, -2));
+        drawerPanel.AddView(drawerHeader, new LinearLayout.LayoutParams(-1, -2));
+
+        var drawerScroll = new ScrollView(this);
+        var drawerContent = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        drawerScroll.AddView(drawerContent);
+        drawerPanel.AddView(drawerScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        AddSection(drawerContent, "Aparência e sistema");
         var themeRow = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         themeRow.SetGravity(GravityFlags.CenterVertical);
-        themeRow.SetPadding(0, 16, 0, 0);
         themeRow.AddView(new TextView(this) { Text = "Tema", TextSize = 15 }, new LinearLayout.LayoutParams(0, -2, 1f));
 
         var themeSpinner = new Spinner(this);
@@ -243,75 +345,111 @@ public sealed class MainActivity : Activity
         themeSpinner.SetSelection(ThemeModes.IndexOf(AppSettings.GetThemeMode()));
         themeSpinner.ItemSelected += (_, args) => OnThemeSelected(args.Position);
         themeRow.AddView(themeSpinner, new LinearLayout.LayoutParams(0, -2, 2f));
-        content.AddView(themeRow, new LinearLayout.LayoutParams(-1, -2));
+        drawerContent.AddView(themeRow, new LinearLayout.LayoutParams(-1, -2));
 
-        preview = new ImageView(this);
-        preview.SetBackgroundColor(Color.Rgb(238, 238, 238));
-        preview.SetScaleType(ImageView.ScaleType.FitCenter);
-        content.AddView(preview, new LinearLayout.LayoutParams(-1, Dp(300)));
-
-        var camera = new Button(this) { Text = "Tirar foto" };
-        camera.Click += (_, _) => TakePhoto();
-        content.AddView(camera);
-
-        var gallery = new Button(this) { Text = "Escolher da galeria" };
-        gallery.Click += (_, _) => PickImage();
-        content.AddView(gallery);
-
-        identifyButton = new Button(this) { Text = "Identificar" };
-        identifyButton.Enabled = false;
-        identifyButton.Click += async (_, _) => await IdentifyAsync();
-        content.AddView(identifyButton);
-
+        AddSection(drawerContent, "FaunaPacks");
         var importPackButton = new Button(this) { Text = "📦 Importar FaunaPack" };
         importPackButton.Click += async (_, _) => await PickPackAsync();
-        content.AddView(importPackButton);
+        drawerContent.AddView(importPackButton);
 
         var managePackButton = new Button(this) { Text = "📚 Gerenciar FaunaPacks" };
         managePackButton.Click += (_, _) => StartManagePacks();
-        content.AddView(managePackButton);
+        drawerContent.AddView(managePackButton);
 
         var createPackButton = new Button(this) { Text = "🧭 Criar FaunaPack por região" };
         createPackButton.Click += (_, _) => StartPackBuilder();
-        content.AddView(createPackButton);
+        drawerContent.AddView(createPackButton);
 
-        var rankingButton = new Button(this) { Text = "🏆 Ranking (prévia)" };
-        rankingButton.Click += (_, _) => StartActivity(new Intent(this, typeof(RankingActivity)));
-        content.AddView(rankingButton);
-
+        AddSection(drawerContent, "BioCLIP offline");
         downloadModelButton = new Button(this) { Text = "Baixar BioCLIP offline" };
         downloadModelButton.Click += async (_, _) => await DownloadModelAsync();
-        content.AddView(downloadModelButton);
+        drawerContent.AddView(downloadModelButton);
 
         var importModelButton = new Button(this) { Text = "Importar BioCLIP ONNX" };
         importModelButton.Click += (_, _) => PickModel();
-        content.AddView(importModelButton);
+        drawerContent.AddView(importModelButton);
 
         endpointInput = new EditText(this)
         {
             Hint = "Servidor BioCLIP 2 opcional (ex.: https://servidor)"
         };
         endpointInput.Text = GetPreferences(FileCreationMode.Private)?.GetString("remote_endpoint", "") ?? "";
-        content.AddView(endpointInput);
+        drawerContent.AddView(endpointInput);
 
-        status = new TextView(this) { TextSize = 13 };
-        status.SetPadding(0, 12, 0, 4);
-        content.AddView(status);
+        drawerStatus = new TextView(this) { TextSize = 13 };
+        drawerStatus.SetPadding(0, 12, 0, 4);
+        drawerContent.AddView(drawerStatus);
 
-        result = new TextView(this) { TextSize = 15 };
-        result.SetPadding(0, 4, 0, 0);
-        content.AddView(result);
+        // Mensagens de status aparecem no painel lateral e no de identificação.
+        status = new MirroredStatus(identifyStatus, drawerStatus);
 
-        matchImages = new LinearLayout(this) { Orientation = Orientation.Horizontal };
-        matchImages.SetPadding(0, 12, 0, 0);
-        content.AddView(matchImages);
+        frame.AddView(drawerPanel, new FrameLayout.LayoutParams(
+            Math.Min(Dp(340), (int)(Resources!.DisplayMetrics!.WidthPixels * 0.85f)),
+            -1,
+            GravityFlags.Start));
 
-        alternatives = new TextView(this) { TextSize = 15 };
-        alternatives.SetPadding(0, 12, 0, 0);
-        content.AddView(alternatives);
+        SetContentView(frame);
+        RefreshPoints();
+    }
 
-        root.AddView(scroll, new LinearLayout.LayoutParams(-1, -1));
-        SetContentView(root);
+    void AddSection(LinearLayout content, string title)
+    {
+        var label = new TextView(this) { Text = title, TextSize = 13 };
+        label.SetTypeface(null, TypefaceStyle.Bold);
+        label.SetPadding(0, Dp(16), 0, Dp(4));
+        content.AddView(label);
+    }
+
+    void RefreshPoints()
+    {
+        pointsChip!.Text = $"🏆 {ScoreStore.TotalPoints} pts";
+    }
+
+    void SetIdentifyOpen(bool open)
+    {
+        identifyOverlay!.Visibility = open ? ViewStates.Visible : ViewStates.Gone;
+        searchButton!.Visibility = open ? ViewStates.Gone : ViewStates.Visible;
+    }
+
+    void OpenDrawer()
+    {
+        drawerScrim!.Visibility = ViewStates.Visible;
+        drawerPanel!.Visibility = ViewStates.Visible;
+    }
+
+    void CloseDrawer()
+    {
+        drawerScrim!.Visibility = ViewStates.Gone;
+        drawerPanel!.Visibility = ViewStates.Gone;
+    }
+
+    // Botão voltar fecha primeiro o painel lateral, depois o de identificação.
+    public override void OnBackPressed()
+    {
+        if (drawerPanel?.Visibility == ViewStates.Visible)
+        {
+            CloseDrawer();
+            return;
+        }
+
+        if (identifyOverlay?.Visibility == ViewStates.Visible)
+        {
+            SetIdentifyOpen(false);
+            return;
+        }
+
+        base.OnBackPressed();
+    }
+
+    // Usa a cor de fundo do tema, para os painéis cobrirem a tela principal.
+    void ApplyWindowBackground(View view)
+    {
+        var typed = new Android.Util.TypedValue();
+        Theme!.ResolveAttribute(Android.Resource.Attribute.WindowBackground, typed, true);
+        if (typed.ResourceId != 0)
+            view.SetBackgroundResource(typed.ResourceId);
+        else
+            view.SetBackgroundColor(new Color(typed.Data));
     }
 
     async Task LoadCatalogOrInstalledPackAsync()
