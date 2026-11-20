@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
+using Android.Content.Res;
 using Android.Graphics;
 using Android.OS;
 using Android.Provider;
@@ -218,36 +219,50 @@ public sealed class MainActivity : Activity
     {
         var frame = new FrameLayout(this);
 
-        // Tela principal (HUD): avatar à esquerda (abre o painel), logo no centro e pontos à direita (ranking).
+        // Tela principal (HUD): cabeçalho de ponta a ponta (avatar, logo e pontuação) e feed de exemplo.
         var page = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        page.SetPadding(Dp(16), Dp(12), Dp(16), Dp(16));
-        page.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(16, 12));
+        ApplyWindowBackground(page);
+        page.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(0, 0));
 
-        var hud = new LinearLayout(this) { Orientation = Orientation.Horizontal };
-        hud.SetGravity(GravityFlags.CenterVertical);
+        var header = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        header.SetGravity(GravityFlags.CenterVertical);
+        header.SetPadding(Dp(12), Dp(10), Dp(12), Dp(10));
+        header.Background = Rounded(HudCard, 0);
 
-        var avatar = new Button(this) { Text = "👤" };
+        // Avatar circular com contorno verde (foto real entra com a rede social).
+        var avatar = new Button(this) { Text = ScoreStore.DisplayName.Substring(0, 1).ToUpperInvariant(), TextSize = 18 };
+        avatar.SetAllCaps(false);
+        avatar.SetTextColor(HudText);
+        avatar.Background = Circle(HudCard, HudGreen, 2);
         avatar.Click += (_, _) => OpenDrawer();
-        hud.AddView(avatar, new LinearLayout.LayoutParams(Dp(56), Dp(56)));
+        header.AddView(avatar, new LinearLayout.LayoutParams(Dp(52), Dp(52)));
 
+        // Logo centralizada: a espaço fixo à esquerda e à direita mantém o centro da tela.
         var logo = new ImageView(this);
         logo.SetImageResource(Resource.Drawable.logo_biodex);
         logo.SetScaleType(ImageView.ScaleType.FitCenter);
-        hud.AddView(logo, new LinearLayout.LayoutParams(0, Dp(56), 1f));
+        header.AddView(logo, new LinearLayout.LayoutParams(0, Dp(56), 1f));
 
-        pointsChip = new Button(this);
+        // Painel de usuário e pontuação: abre o ranking.
+        pointsChip = new Button(this) { TextSize = 13 };
+        pointsChip.SetAllCaps(false);
+        pointsChip.SetTextColor(HudText);
+        pointsChip.Background = Rounded(HudCard, 14, HudGreen, 2);
         pointsChip.Click += (_, _) => StartActivity(new Intent(this, typeof(RankingActivity)));
-        hud.AddView(pointsChip, new LinearLayout.LayoutParams(-2, -2));
-        page.AddView(hud, new LinearLayout.LayoutParams(-1, -2));
+        header.AddView(pointsChip, new LinearLayout.LayoutParams(-2, -2));
+        page.AddView(header, new LinearLayout.LayoutParams(-1, -2));
 
-        var home = new TextView(this)
-        {
-            Text = "Toque na lupa para identificar um animal.\n\nO feed dos amigos entra aqui depois.",
-            TextSize = 16,
-            Gravity = GravityFlags.Center
-        };
-        home.SetPadding(Dp(24), Dp(48), Dp(24), 0);
-        page.AddView(home, new LinearLayout.LayoutParams(-1, 0, 1f));
+        // Linha verde luminosa separando o cabeçalho do feed.
+        var headerLine = new View(this);
+        headerLine.SetBackgroundColor(HudGreen);
+        page.AddView(headerLine, new LinearLayout.LayoutParams(-1, Dp(2)));
+
+        var feedScroll = new ScrollView(this);
+        var feed = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        feed.SetPadding(Dp(16), Dp(16), Dp(16), Dp(160));
+        AddSamplePosts(feed);
+        feedScroll.AddView(feed);
+        page.AddView(feedScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
         frame.AddView(page, new FrameLayout.LayoutParams(-1, -1));
 
         // Painel da lupa: foto, identificação e resultados.
@@ -300,10 +315,25 @@ public sealed class MainActivity : Activity
         identifyContent.AddView(alternatives);
         frame.AddView(identifyOverlay, new FrameLayout.LayoutParams(-1, -1));
 
+        // Botões flutuantes: envio (acima) e lupa (abaixo), no mesmo padrão visual.
+        var sendButton = new Button(this) { Text = "➤", TextSize = 20 };
+        sendButton.SetAllCaps(false);
+        sendButton.SetTextColor(HudGreen);
+        sendButton.Background = Circle(HudCard, HudGreen, 2);
+        sendButton.Click += (_, _) => Toast("As publicações entram quando a rede social estiver pronta.");
+        frame.AddView(sendButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.End | GravityFlags.Bottom)
+        {
+            RightMargin = Dp(20),
+            BottomMargin = Dp(100)
+        });
+
         // Botão de lupa flutuante: abre o painel de identificação.
-        searchButton = new Button(this) { Text = "🔍" };
+        searchButton = new Button(this) { Text = "🔍", TextSize = 20 };
+        searchButton.SetAllCaps(false);
+        searchButton.SetTextColor(HudGreen);
+        searchButton.Background = Circle(HudCard, HudGreen, 2);
         searchButton.Click += (_, _) => SetIdentifyOpen(true);
-        frame.AddView(searchButton, new FrameLayout.LayoutParams(Dp(64), Dp(64), GravityFlags.End | GravityFlags.Bottom)
+        frame.AddView(searchButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.End | GravityFlags.Bottom)
         {
             RightMargin = Dp(20),
             BottomMargin = Dp(24)
@@ -402,7 +432,101 @@ public sealed class MainActivity : Activity
 
     void RefreshPoints()
     {
-        pointsChip!.Text = $"🏆 {ScoreStore.TotalPoints} pts";
+        pointsChip!.Text = $"🏆 {ScoreStore.DisplayName}\n★ {ScoreStore.TotalPoints:N0} pts";
+    }
+
+    // Cores do HUD, seguindo a especificação: verde-escuro com verde luminoso no escuro; claro no tema claro.
+    bool IsDarkMode => (Resources!.Configuration!.UiMode & UiMode.NightMask) == UiMode.NightYes;
+    Color HudCard => IsDarkMode ? Color.Rgb(0, 29, 10) : Color.Rgb(255, 255, 255);
+    Color HudGreen => Color.Rgb(32, 230, 0);
+    Color HudText => IsDarkMode ? Color.Rgb(245, 245, 245) : Color.Rgb(16, 24, 16);
+    Color HudMuted => IsDarkMode ? Color.Rgb(168, 168, 168) : Color.Rgb(90, 100, 90);
+
+    Android.Graphics.Drawables.GradientDrawable Rounded(Color fill, int radiusDp, Color? stroke = null, int strokeDp = 0)
+    {
+        var shape = new Android.Graphics.Drawables.GradientDrawable();
+        shape.SetCornerRadius(Dp(radiusDp));
+        shape.SetColor(fill);
+        if (stroke is Color line && strokeDp > 0)
+            shape.SetStroke(Dp(strokeDp), line);
+        return shape;
+    }
+
+    Android.Graphics.Drawables.GradientDrawable Circle(Color fill, Color stroke, int strokeDp)
+    {
+        var shape = Rounded(fill, 999, stroke, strokeDp);
+        shape.SetShape(Android.Graphics.Drawables.ShapeType.Oval);
+        return shape;
+    }
+
+    void Toast(string text)
+    {
+        Android.Widget.Toast.MakeText(this, text, ToastLength.Short)?.Show();
+    }
+
+    // Publicações de exemplo, só para visualizar o feed. Nomes e imagens são fictícios.
+    void AddSamplePosts(LinearLayout feed)
+    {
+        var samples = new (string Name, int Points, Color Tint)[]
+        {
+            ("MiauPlayer", 25, Color.Rgb(120, 90, 60)),
+            ("DogMaster", 25, Color.Rgb(200, 160, 90)),
+            ("PetLover", 25, Color.Rgb(40, 40, 40))
+        };
+
+        foreach (var sample in samples)
+            feed.AddView(BuildPostCard(sample.Name, sample.Points, sample.Tint),
+                new LinearLayout.LayoutParams(-1, -2) { BottomMargin = Dp(16) });
+    }
+
+    View BuildPostCard(string name, int points, Color tint)
+    {
+        var card = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        card.SetPadding(Dp(14), Dp(14), Dp(14), Dp(14));
+        card.Background = Rounded(HudCard, 16, HudGreen, 2);
+
+        var top = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        top.SetGravity(GravityFlags.CenterVertical);
+
+        var avatar = new TextView(this) { Text = name.Substring(0, 1), TextSize = 16 };
+        avatar.Gravity = GravityFlags.Center;
+        avatar.SetTextColor(Color.White);
+        avatar.Background = Circle(tint, HudGreen, 2);
+        top.AddView(avatar, new LinearLayout.LayoutParams(Dp(46), Dp(46)));
+
+        var texts = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        texts.SetPadding(Dp(12), 0, 0, 0);
+
+        var nameView = new TextView(this) { Text = name, TextSize = 16 };
+        nameView.SetTypeface(null, TypefaceStyle.Bold);
+        nameView.SetTextColor(HudText);
+        texts.AddView(nameView);
+
+        var description = new TextView(this) { Text = "Adicione uma descrição…", TextSize = 13 };
+        description.SetTextColor(HudMuted);
+        texts.AddView(description);
+
+        var reward = new TextView(this) { Text = $"🏆 + {points}", TextSize = 13 };
+        reward.SetTextColor(HudGreen);
+        texts.AddView(reward);
+        top.AddView(texts, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        var menu = new TextView(this) { Text = "⋮", TextSize = 22 };
+        menu.SetTextColor(HudMuted);
+        menu.Click += (_, _) => Toast("Opções da publicação entram com a rede social.");
+        top.AddView(menu, new LinearLayout.LayoutParams(Dp(32), -2));
+        card.AddView(top);
+
+        // Espaço da imagem (proporção próxima de 16:9). A foto real entra com a rede social.
+        var image = new FrameLayout(this);
+        image.Background = Rounded(tint, 12);
+        var caption = new TextView(this) { Text = "imagem de exemplo", TextSize = 13 };
+        caption.Gravity = GravityFlags.Center;
+        caption.SetTextColor(Color.White);
+        image.AddView(caption, new FrameLayout.LayoutParams(-1, -1));
+        card.AddView(image, new LinearLayout.LayoutParams(-1, Dp(200)) { TopMargin = Dp(12) });
+
+        return card;
     }
 
     void SetIdentifyOpen(bool open)
