@@ -436,7 +436,7 @@ public sealed class MainActivity : Activity
     }
 
     // Cores do HUD, seguindo a especificação: verde-escuro com verde luminoso no escuro; claro no tema claro.
-    bool IsDarkMode => (Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes;
+    bool IsDarkMode => HudBackground.IsDark(this);
     Color HudCard => IsDarkMode ? Color.Rgb(0, 29, 10) : Color.Rgb(255, 255, 255);
     Color HudGreen => Color.Rgb(32, 230, 0);
     Color HudText => IsDarkMode ? Color.Rgb(245, 245, 245) : Color.Rgb(16, 24, 16);
@@ -565,56 +565,8 @@ public sealed class MainActivity : Activity
         base.OnBackPressed();
     }
 
-    // Usa a cor de fundo do tema, para os painéis cobrirem a tela principal.
-    void ApplyWindowBackground(View view)
-    {
-        var typed = new Android.Util.TypedValue();
-        Theme!.ResolveAttribute(Android.Resource.Attribute.WindowBackground, typed, true);
-        if (typed.ResourceId != 0)
-            view.SetBackgroundResource(typed.ResourceId);
-        else
-            view.SetBackgroundColor(new Color(typed.Data));
-    }
-
-    // Fundo do HUD no modo escuro: gradiente vertical (#001006 → #001A08 → #001006) com brilhos verdes suaves,
-    // traduzidos do CSS do projeto. No modo claro mantém o fundo do tema.
-    void ApplyHudBackground(View view)
-    {
-        if (!IsDarkMode)
-        {
-            ApplyWindowBackground(view);
-            return;
-        }
-
-        var baseLayer = new GradientDrawable(
-            GradientDrawable.Orientation.TopBottom,
-            new[] { Argb(255, 0, 16, 6), Argb(255, 0, 26, 8), Argb(255, 0, 16, 6) });
-
-        var layers = new Drawable[]
-        {
-            baseLayer,
-            RadialGlow(0.5f, 0.2f, 0.6f, 60, 35, 130, 35),
-            RadialGlow(0.0f, 0.5f, 0.5f, 40, 57, 185, 0),
-            RadialGlow(1.0f, 0.8f, 0.5f, 40, 32, 230, 0),
-        };
-
-        view.Background = new LayerDrawable(layers);
-    }
-
-    // Cor ARGB em inteiro, o formato que o GradientDrawable aceita.
-    static int Argb(int alpha, int red, int green, int blue) =>
-        (alpha << 24) | (red << 16) | (green << 8) | blue;
-
-    GradientDrawable RadialGlow(float centerX, float centerY, float relativeRadius, int alpha, int red, int green, int blue)
-    {
-        var glow = new GradientDrawable();
-        glow.SetGradientType(Android.Graphics.Drawables.GradientType.RadialGradient);
-        glow.SetColors(new[] { Argb(alpha, red, green, blue), Argb(0, red, green, blue) });
-        glow.SetGradientCenter(centerX, centerY);
-        // O raio do gradiente é em pixels: a referência é a largura da tela.
-        glow.SetGradientRadius(Resources!.DisplayMetrics!.WidthPixels * relativeRadius);
-        return glow;
-    }
+    // Fundo do app (claro ou escuro, conforme o tema): ver HudBackground.
+    void ApplyHudBackground(View view) => HudBackground.Apply(view, this);
 
     async Task LoadCatalogOrInstalledPackAsync()
     {

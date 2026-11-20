@@ -43,6 +43,7 @@ public sealed class PackManagerActivity : Activity
         scroll.AddView(content);
         root.AddView(scroll, new LinearLayout.LayoutParams(-1, -1));
         SetContentView(root);
+        HudBackground.Apply(root, this);
 
         var title = new TextView(this) { Text = "Gerenciar FaunaPacks", TextSize = 24 };
         title.SetTypeface(null, Android.Graphics.TypefaceStyle.Bold);

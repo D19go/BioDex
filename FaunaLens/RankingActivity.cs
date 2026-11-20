@@ -50,6 +50,7 @@ public sealed class RankingActivity : Activity
         scroll.AddView(list);
         root.AddView(scroll);
         SetContentView(root);
+        HudBackground.Apply(root, this);
     }
 
     // Atualizado a cada volta para a tela, então a sua linha reflete as identificações feitas.

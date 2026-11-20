@@ -139,6 +139,7 @@ public sealed class PackBuilderActivity : Activity
         scroll.AddView(content);
         root.AddView(scroll);
         SetContentView(root);
+        HudBackground.Apply(root, this);
 
         var settings = target?.BuildSettings;
 
