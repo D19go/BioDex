@@ -8,6 +8,7 @@ using Android.Text;
 using Android.Views;
 using Android.Widget;
 using FaunaLens.Services;
+using Path = System.IO.Path;
 using Uri = Android.Net.Uri;
 
 namespace FaunaLens;
