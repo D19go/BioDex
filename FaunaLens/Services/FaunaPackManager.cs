@@ -16,6 +16,7 @@ public sealed class FaunaPackManager
 {
     const string PreferencesName = "faunalens_packs";
     const string ActivePackKey = "active_pack_id";
+    const string EnabledPacksKey = "enabled_pack_ids";
 
     static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -26,6 +27,9 @@ public sealed class FaunaPackManager
 
     public async Task<FaunaPackData> InstallAsync(string sourcePath, CancellationToken cancellationToken = default)
     {
+        if (!ModelStorage.HasAccess(Android.App.Application.Context))
+            throw new InvalidOperationException("Libere o acesso a arquivos para salvar o pack em Download/BioDex/FaunaPacks.");
+
         Directory.CreateDirectory(FileSystem.PackDirectory);
         var pack = await reader.InstallAsync(
             sourcePath,
@@ -33,11 +37,16 @@ public sealed class FaunaPackManager
             cancellationToken);
 
         SetActivePackId(pack.Manifest.PackId);
+        SetPackEnabled(pack.Manifest.PackId, true);
         return pack;
     }
 
     public async Task<IReadOnlyList<InstalledFaunaPack>> ListAsync(CancellationToken cancellationToken = default)
     {
+        // Sem acesso a Download/BioDex não há como ler os packs: a lista fica vazia em vez de quebrar a tela.
+        if (!ModelStorage.HasAccess(Android.App.Application.Context))
+            return Array.Empty<InstalledFaunaPack>();
+
         Directory.CreateDirectory(FileSystem.PackDirectory);
         var directories = Directory.GetDirectories(FileSystem.PackDirectory);
         var output = new List<InstalledFaunaPack>();
@@ -84,6 +93,18 @@ public sealed class FaunaPackManager
             .ToList();
     }
 
+    // Pack que a criação deve ampliar: o escolhido para atualização ou, na falta dele, o da mesma região.
+    public async Task<InstalledFaunaPack?> FindBaselineAsync(PackBuildOptions options, CancellationToken cancellationToken = default)
+    {
+        var packs = await ListAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(options.UpdatePackId))
+            return packs.FirstOrDefault(pack => pack.PackId == options.UpdatePackId);
+
+        var region = string.IsNullOrWhiteSpace(options.StateProvince) ? BrazilRegions.WholeCountry : options.StateProvince;
+        return packs.FirstOrDefault(pack => pack.Region.Length > 0 && BrazilRegions.Same(pack.Region, region));
+    }
+
     public async Task<FaunaPackData> LoadAsync(
         string directoryPath,
         CancellationToken cancellationToken = default)
@@ -92,6 +113,64 @@ public sealed class FaunaPackManager
         SetActivePackId(pack.Manifest.PackId);
         return pack;
     }
+
+    // Packs marcados para a identificação. Antes da primeira marcação, usa o pack ativo (ou o primeiro).
+    public async Task<IReadOnlySet<string>> GetEnabledPackIdsAsync(CancellationToken cancellationToken = default)
+    {
+        if (EnabledPreferences()?.Contains(EnabledPacksKey) != true)
+        {
+            var packs = await ListAsync(cancellationToken);
+            var active = GetActivePackId();
+            var first = packs.FirstOrDefault(pack => pack.PackId == active) ?? packs.FirstOrDefault();
+            if (first is not null)
+                SetPackEnabled(first.PackId, true);
+        }
+
+        return ReadEnabledIds();
+    }
+
+    public void SetPackEnabled(string packId, bool enabled)
+    {
+        var ids = ReadEnabledIds();
+        if (enabled)
+            ids.Add(packId);
+        else
+            ids.Remove(packId);
+
+        EnabledPreferences()?.Edit()?.PutString(EnabledPacksKey, string.Join("\n", ids))?.Apply();
+    }
+
+    // Carrega todos os packs marcados. Um pack inválido não impede os outros.
+    public async Task<List<FaunaPackData>> LoadEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        var enabled = await GetEnabledPackIdsAsync(cancellationToken);
+        var packs = await ListAsync(cancellationToken);
+        var output = new List<FaunaPackData>();
+
+        foreach (var pack in packs.Where(pack => enabled.Contains(pack.PackId)))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                output.Add(await reader.LoadInstalledAsync(pack.DirectoryPath, cancellationToken));
+            }
+            catch
+            {
+                // Pack inválido: a identificação segue com os outros.
+            }
+        }
+
+        return output;
+    }
+
+    HashSet<string> ReadEnabledIds()
+    {
+        var raw = EnabledPreferences()?.GetString(EnabledPacksKey, "") ?? "";
+        return raw.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+    }
+
+    Android.Content.ISharedPreferences? EnabledPreferences() =>
+        Android.App.Application.Context.GetSharedPreferences(PreferencesName, Android.Content.FileCreationMode.Private);
 
     public string? GetActivePackId()
     {
@@ -120,7 +199,7 @@ public sealed class FaunaPackManager
         var root = Path.GetFullPath(FileSystem.PackDirectory) + Path.DirectorySeparatorChar;
 
         if (!fullDirectory.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("O pacote está fora da pasta de instalação do FaunaLens.");
+            throw new InvalidOperationException("O pacote está fora da pasta de instalação do Biodex.");
 
         Directory.Delete(fullDirectory, true);
 

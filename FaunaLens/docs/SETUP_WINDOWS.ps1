@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Continue'
-Write-Host "=== Fauna Lens - verificação do ambiente ===" -ForegroundColor Cyan
+Write-Host "=== Biodex - verificação do ambiente ===" -ForegroundColor Cyan
 
 function Check($name, $command) {
     $cmd = Get-Command $command -ErrorAction SilentlyContinue

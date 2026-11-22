@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using FaunaLens.Models;
 using FaunaPackBuilder;
 // Alias em vez de "using Android.Graphics": o namespace tem um tipo Path que conflita com System.IO.Path.
 using Bitmap = Android.Graphics.Bitmap;
@@ -7,6 +8,8 @@ namespace FaunaLens.Services;
 
 // Mesma lógica do FaunaPack Builder (busca no GBIF, licenças, formato do pacote), mas os
 // embeddings são gerados pelo BioCLIP do próprio celular, o mesmo usado na identificação.
+// Com um pack de base (mesma região ou escolhido para atualização), a criação amplia esse pack:
+// mantém as imagens que ele já tem e baixa só imagens novas, priorizando espécies novas.
 public sealed class AppPackBuilder
 {
     const string CountryCode = "BR";
@@ -14,6 +17,9 @@ public sealed class AppPackBuilder
     const int ThumbnailQuality = 82;
     const int MinImageBytes = 5_000;
     const int EmbeddingDimension = 512;
+
+    // Salva o pack a cada N espécies processadas, para o progresso sobreviver a uma queda do app.
+    const int CheckpointEverySpecies = 5;
 
     readonly BioClipOnnxEngine engine;
     readonly Action<string> log;
@@ -27,7 +33,14 @@ public sealed class AppPackBuilder
     }
 
     // Devolve o caminho de um .faunapack temporário, pronto para ser instalado.
-    public async Task<string> BuildToFileAsync(PackBuildOptions requested, CancellationToken ct)
+    // O pack é salvo mesmo se algumas espécies ficarem com menos imagens que o pedido.
+    // "checkpoint" recebe um pack parcial (com o que já foi baixado) sempre que ele precisa ser salvo:
+    // a cada alguns passos, e também ao cancelar ou falhar. Quem o recebe instala o pack.
+    public async Task<string> BuildToFileAsync(
+        PackBuildOptions requested,
+        InstalledFaunaPack? baseline,
+        CancellationToken ct,
+        Func<string, Task>? checkpoint = null)
     {
         var options = requested.Normalized();
         if (!engine.IsReady)
@@ -38,65 +51,156 @@ public sealed class AppPackBuilder
         var output = Path.Combine(buildRoot, $"{Guid.NewGuid():N}.faunapack");
         Directory.CreateDirectory(Path.Combine(work, "references"));
 
+        // Estado da criação. Fica fora do try para que a rotina de salvamento parcial (catch) enxergue tudo.
+        var all = new List<PackSpecies>();
+        var byId = new Dictionary<string, PackSpecies>(StringComparer.OrdinalIgnoreCase);
+        FaunaPackData? existing = null;
+        PackSpecies? inProgress = null;
+        string? resolvedPackId = null;
+
+        string PackNameNow() => existing?.Manifest.PackName ?? options.PackName;
+
+        // Id fixo durante toda a criação: os checkpoints e o pack final substituem o mesmo pack.
+        string PackIdNow() => resolvedPackId ??= existing?.Manifest.PackId ?? options.UpdatePackId ?? BuildPackId(PackNameNow());
+
+        PackBuildSettings MakeSettings() => new()
+        {
+            Country = CountryCode,
+            StateProvince = options.StateProvince,
+            MaxSpecies = options.MaxSpecies,
+            SearchPages = options.SearchPages,
+            AllowBySa = options.AllowBySa,
+            ImagesPerSpecies = options.ImagesPerSpecies
+        };
+
+        // Espécies já processadas com pelo menos uma imagem, mais a que estava em andamento.
+        List<PackSpecies> Snapshot()
+        {
+            var list = all.Where(x => x.References.Count > 0).ToList();
+            if (inProgress is not null && inProgress.References.Count > 0 && !list.Contains(inProgress))
+                list.Add(inProgress);
+            return list;
+        }
+
+        async Task SaveCheckpointAsync()
+        {
+            if (checkpoint is null)
+                return;
+
+            var snapshot = Snapshot();
+            if (snapshot.Count == 0)
+                return;
+
+            PackWriter.Write(output, PackNameNow(), snapshot, work, PackIdNow(), MakeSettings());
+            await checkpoint(output);
+            log($"Progresso salvo no pack: {snapshot.Count} espécies, {snapshot.Sum(x => x.References.Count)} imagens.");
+        }
+
         try
         {
+            if (baseline is not null)
+            {
+                existing = await new FaunaPackReader().LoadInstalledAsync(baseline.DirectoryPath, ct);
+                var vectors = await new FaunaPackReader().ReadReferenceEmbeddingsAsync(existing, ct);
+                log($"Ampliando \"{existing.Manifest.PackName}\": {existing.Entries.Count} espécies já estão no pack.");
+
+                for (var s = 0; s < existing.Entries.Count; s++)
+                {
+                    var item = CopyExisting(existing, existing.Entries[s], vectors[s], work);
+                    all.Add(item);
+                    byId[item.Species.Id] = item;
+                }
+            }
+
             using var gbif = new GbifClient { Log = log };
             var where = string.IsNullOrWhiteSpace(options.StateProvince) ? "Brasil" : options.StateProvince;
-            log($"Descobrindo até {options.MaxSpecies} espécies no GBIF ({where})...");
+            log($"Descobrindo espécies no GBIF ({where})...");
 
-            var species = await gbif.DiscoverSpeciesAsync(
+            // Busca além das já existentes, para ainda sobrar espécies novas para trazer.
+            var discovered = await gbif.DiscoverSpeciesAsync(
                 CountryCode,
                 options.StateProvince,
-                options.MaxSpecies,
+                options.MaxSpecies + byId.Count,
                 1,
                 options.SearchPages,
                 ct,
                 log);
 
-            if (species.Count == 0)
+            if (discovered.Count == 0 && byId.Count == 0)
                 throw new InvalidOperationException("O GBIF não retornou espécies para esta região.");
 
-            log($"Espécies para processar: {species.Count}");
-            var built = new List<PackSpecies>();
+            var newOnes = discovered.Where(x => !byId.ContainsKey(x.Id)).ToList();
+            var repeated = discovered.Where(x => byId.ContainsKey(x.Id)).ToList();
+            var queue = PackGrowthPolicy.Order(newOnes, repeated);
+            log($"Espécies novas: {newOnes.Count} · já no pack: {repeated.Count}");
 
-            for (var index = 0; index < species.Count; index++)
+            if (queue.Count == 0)
+                throw new InvalidOperationException("O GBIF não trouxe espécies para ampliar este pack.");
+
+            for (var index = 0; index < queue.Count; index++)
             {
                 ct.ThrowIfCancellationRequested();
-                var item = species[index];
-                log($"[{index + 1}/{species.Count}] {item.CommonName} — {item.ScientificName}");
+                var item = queue[index];
+                var known = byId.TryGetValue(item.Id, out var current);
+                var entry = current ?? new PackSpecies { Species = item };
+                inProgress = entry;
 
-                var result = await BuildSpeciesAsync(gbif, item, options, work, ct);
-                if (result is null)
+                if (known)
                 {
-                    log($"  IGNORADA: não foi possível obter {options.ImagesPerSpecies} imagens licenciadas.");
+                    // Nome atualizado pelo GBIF (português ou indígena), sem o fallback antigo.
+                    entry.Species.CommonName = item.CommonName;
+                    entry.Species.ScientificName = item.ScientificName;
+                }
+
+                log($"[{index + 1}/{queue.Count}] {(known ? "já no pack" : "nova")}: {entry.Species.CommonName} — {entry.Species.ScientificName}");
+
+                var wanted = PackGrowthPolicy.NewImagesAllowed(entry.References.Count, options.ImagesPerSpecies);
+                var added = wanted == 0
+                    ? 0
+                    : await CollectImagesAsync(gbif, entry, options, wanted, work, ct);
+
+                if (known)
+                {
+                    log(wanted == 0
+                        ? $"  limite de {PackGrowthPolicy.MaxImagesPerSpecies} imagens atingido"
+                        : added == 0
+                            ? "  sem imagens novas licenciadas"
+                            : $"  +{added} imagem(ns) nova(s); total {entry.References.Count}");
+                }
+                else if (entry.References.Count == 0)
+                {
+                    log("  IGNORADA: nenhuma imagem licenciada encontrada.");
                 }
                 else
                 {
-                    built.Add(result);
-                    log($"  OK: {options.ImagesPerSpecies} imagens + embeddings.");
+                    all.Add(entry);
+                    byId[entry.Species.Id] = entry;
+                    log(entry.References.Count >= options.ImagesPerSpecies
+                        ? $"  OK: {entry.References.Count} imagens + embeddings."
+                        : $"  PARCIAL: {entry.References.Count} de {options.ImagesPerSpecies} imagens (salva mesmo assim).");
                 }
 
-                progress((index + 1) * 100 / species.Count);
+                inProgress = null;
+                progress((index + 1) * 100 / queue.Count);
+
+                if ((index + 1) % CheckpointEverySpecies == 0)
+                    await SaveCheckpointAsync();
             }
 
-            if (built.Count == 0)
-                throw new InvalidOperationException("Nenhuma espécie conseguiu a quantidade de imagens licenciadas configurada.");
+            if (all.Count == 0)
+                throw new InvalidOperationException("Nenhuma espécie conseguiu imagens licenciadas.");
 
-            log($"Escrevendo pack com {built.Count} espécies...");
-            var packId = options.UpdatePackId ?? BuildPackId(options.PackName);
-            var settings = new PackBuildSettings
-            {
-                Country = CountryCode,
-                StateProvince = options.StateProvince,
-                MaxSpecies = options.MaxSpecies,
-                SearchPages = options.SearchPages,
-                AllowBySa = options.AllowBySa
-            };
-            PackWriter.Write(output, options.PackName, built, work, packId, settings);
+            var totalImages = all.Sum(x => x.References.Count);
+            log($"Escrevendo pack com {all.Count} espécies e {totalImages} imagens...");
+            PackWriter.Write(output, PackNameNow(), all, work, PackIdNow(), MakeSettings());
             return output;
         }
         catch
         {
+            // Salva o que já foi baixado (também ao cancelar ou falhar): a próxima criação da região continua daqui.
+            try { await SaveCheckpointAsync(); }
+            catch { /* o erro original é o que importa */ }
+
             if (File.Exists(output)) File.Delete(output);
             throw;
         }
@@ -106,15 +210,54 @@ public sealed class AppPackBuilder
         }
     }
 
-    async Task<PackSpecies?> BuildSpeciesAsync(
+    // Copia as imagens de um pack existente para a pasta de trabalho, numeradas de novo (1, 2, ...).
+    static PackSpecies CopyExisting(FaunaPackData pack, FaunaPackSpeciesEntry source, List<float[]> vectors, string work)
+    {
+        var id = source.Species.Id;
+        var folder = Path.Combine(work, "references", id);
+        Directory.CreateDirectory(folder);
+
+        var item = new PackSpecies { Species = ToSpeciesInput(source.Species) };
+        for (var r = 0; r < source.References.Count; r++)
+        {
+            var reference = source.References[r];
+            var index = r + 1;
+            var from = Path.Combine(pack.DirectoryPath, reference.File.Replace('/', Path.DirectorySeparatorChar));
+            File.Copy(from, Path.Combine(folder, $"{index}.jpg"), true);
+
+            item.References.Add(new ReferenceImageInfo
+            {
+                Index = index,
+                File = $"images/{id}/{index}.jpg",
+                GbifId = reference.GbifId,
+                SourceUrl = reference.SourceUrl,
+                OccurrenceUrl = reference.OccurrenceUrl,
+                License = reference.License,
+                Creator = reference.Creator,
+                RightsHolder = reference.RightsHolder,
+                Dataset = reference.Dataset
+            });
+            item.Embeddings.Add(vectors[r]);
+        }
+
+        return item;
+    }
+
+    // Acrescenta até "wanted" imagens novas à espécie. Nunca repete uma mídia do GBIF nem um arquivo
+    // (mesmo conteúdo, mesmo hash) que a espécie já tenha. Devolve quantas entraram.
+    // Prioridade a espécimes novos: primeiro uma foto de cada registro GBIF que o pack ainda não tem;
+    // depois outras fotos de registros novos; só por último, fotos de registros que o pack já tem.
+    async Task<int> CollectImagesAsync(
         GbifClient gbif,
-        SpeciesInput species,
+        PackSpecies entry,
         PackBuildOptions options,
+        int wanted,
         string work,
         CancellationToken ct)
     {
+        var species = entry.Species;
         if (string.IsNullOrWhiteSpace(species.ScientificName))
-            return null;
+            return 0;
 
         var candidates = await gbif.SearchImagesAsync(
             species.ScientificName,
@@ -122,76 +265,136 @@ public sealed class AppPackBuilder
             options.StateProvince,
             options.SearchPages,
             ct,
-            (page, total) => log($"  busca GBIF: página {page}/{total}"));
+            (page, total) => log($"  busca GBIF: página {page}/{total}"),
+            taxonKey: species.GbifTaxonKey);
 
         log($"  candidatos GBIF: {candidates.Count}");
 
-        var usedMedia = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var usedHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var result = new PackSpecies { Species = species };
+        var usedMedia = new HashSet<string>(entry.References.Select(x => x.SourceUrl), StringComparer.OrdinalIgnoreCase);
+        var usedHashes = new HashSet<string>(ExistingHashes(work, species.Id, entry.References), StringComparer.OrdinalIgnoreCase);
+        var usedOccurrences = new HashSet<long>(entry.References.Select(x => x.GbifId));
+        var fresh = candidates.Where(o => !usedOccurrences.Contains(o.Key)).ToList();
+        var reused = candidates.Where(o => usedOccurrences.Contains(o.Key)).ToList();
+        var passes = new (List<GbifOccurrence> Group, int Limit)[]
+        {
+            (fresh, 1),
+            (fresh, int.MaxValue),
+            (reused, int.MaxValue)
+        };
+        var takenPerOccurrence = new Dictionary<long, int>();
+
         var folder = Path.Combine(work, "references", species.Id);
         Directory.CreateDirectory(folder);
 
-        foreach (var occurrence in candidates)
+        var added = 0;
+        foreach (var (group, limit) in passes)
         {
-            foreach (var media in occurrence.Media)
+            foreach (var occurrence in group)
             {
-                ct.ThrowIfCancellationRequested();
-                if (result.References.Count >= options.ImagesPerSpecies) break;
-                if (!GbifLicense.IsAllowed(media.License, options.AllowBySa)) continue;
-                if (string.IsNullOrWhiteSpace(media.Identifier)) continue;
-                if (!usedMedia.Add(media.Identifier)) continue;
-
-                try
+                foreach (var media in occurrence.Media)
                 {
-                    var raw = await gbif.DownloadImageAsync(occurrence, media, ct);
-                    if (raw.Length < MinImageBytes) continue;
+                    ct.ThrowIfCancellationRequested();
+                    if (added >= wanted)
+                        return added;
+                    if (takenPerOccurrence.GetValueOrDefault(occurrence.Key) >= limit)
+                        break;
+                    if (!GbifLicense.IsAllowed(media.License, options.AllowBySa)) continue;
+                    if (string.IsNullOrWhiteSpace(media.Identifier)) continue;
+                    if (!usedMedia.Add(media.Identifier)) continue;
 
-                    var thumbnail = await Task.Run(() => MakeThumbnail(raw, work), ct);
-                    if (thumbnail.Length < MinImageBytes) continue;
-
-                    var hash = Convert.ToHexString(SHA256.HashData(thumbnail));
-                    if (!usedHashes.Add(hash)) continue;
-
-                    var index = result.References.Count + 1;
-                    var localPath = Path.Combine(folder, $"{index}.jpg");
-                    await File.WriteAllBytesAsync(localPath, thumbnail, ct);
-
-                    var vector = await Task.Run(() => engine.EncodeImage(localPath), ct);
-                    if (vector.Length != EmbeddingDimension)
-                        throw new InvalidOperationException($"Embedding inesperado: {vector.Length} dimensões.");
-
-                    result.Embeddings.Add(vector);
-                    result.References.Add(new ReferenceImageInfo
+                    try
                     {
-                        Index = index,
-                        File = $"images/{species.Id}/{index}.jpg",
-                        GbifId = occurrence.Key,
-                        SourceUrl = media.Identifier,
-                        OccurrenceUrl = $"https://www.gbif.org/occurrence/{occurrence.Key}",
-                        License = media.License,
-                        Creator = media.Creator ?? occurrence.RightsHolder,
-                        RightsHolder = media.RightsHolder ?? occurrence.RightsHolder,
-                        Dataset = occurrence.DatasetName
-                    });
+                        log($"  GBIF {occurrence.Key}: baixando imagem...");
+                        var started = DateTime.UtcNow;
+                        var raw = await gbif.DownloadImageAsync(occurrence, media, ct);
+                        var downloadSeconds = (DateTime.UtcNow - started).TotalSeconds;
+                        log($"  GBIF {occurrence.Key}: {raw.Length / 1024} KB em {downloadSeconds:0.0} s");
+                        if (raw.Length < MinImageBytes) continue;
 
-                    log($"  imagem {index}/{options.ImagesPerSpecies}: GBIF {occurrence.Key}, licença {media.License}");
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    log($"  imagem ignorada: {ex.Message}");
+                        var thumbnail = await Task.Run(() => MakeThumbnail(raw, work), ct);
+                        if (thumbnail.Length < MinImageBytes) continue;
+
+                        var hash = Convert.ToHexString(SHA256.HashData(thumbnail));
+                        if (!usedHashes.Add(hash)) continue;
+
+                        var index = entry.References.Count + 1;
+                        var localPath = Path.Combine(folder, $"{index}.jpg");
+                        await File.WriteAllBytesAsync(localPath, thumbnail, ct);
+
+                        var embedStarted = DateTime.UtcNow;
+                        var vector = await Task.Run(() => engine.EncodeImage(localPath), ct);
+                        var embedMs = (DateTime.UtcNow - embedStarted).TotalMilliseconds;
+                        if (vector.Length != EmbeddingDimension)
+                            throw new InvalidOperationException($"Embedding inesperado: {vector.Length} dimensões.");
+
+                        entry.Embeddings.Add(vector);
+                        entry.References.Add(new ReferenceImageInfo
+                        {
+                            Index = index,
+                            File = $"images/{species.Id}/{index}.jpg",
+                            GbifId = occurrence.Key,
+                            SourceUrl = media.Identifier,
+                            OccurrenceUrl = $"https://www.gbif.org/occurrence/{occurrence.Key}",
+                            License = media.License,
+                            Creator = media.Creator ?? occurrence.RightsHolder,
+                            RightsHolder = media.RightsHolder ?? occurrence.RightsHolder,
+                            Dataset = occurrence.DatasetName
+                        });
+
+                        added++;
+                        takenPerOccurrence[occurrence.Key] = takenPerOccurrence.GetValueOrDefault(occurrence.Key) + 1;
+                        log($"  imagem {index} pronta ({added}/{wanted} nesta rodada; embedding {embedMs:0} ms)");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        log($"  imagem ignorada: {ex.Message}");
+                    }
                 }
             }
-
-            if (result.References.Count >= options.ImagesPerSpecies) break;
         }
 
-        return result.References.Count == options.ImagesPerSpecies ? result : null;
+        return added;
     }
+
+    // Hash de cada imagem que a espécie já tem, para não aceitar a mesma foto de novo com outra URL.
+    static IEnumerable<string> ExistingHashes(string work, string id, IEnumerable<ReferenceImageInfo> references)
+    {
+        foreach (var reference in references)
+        {
+            var path = Path.Combine(work, "references", id, $"{reference.Index}.jpg");
+            if (!File.Exists(path)) continue;
+            yield return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+        }
+    }
+
+    static SpeciesInput ToSpeciesInput(Species species) => new()
+    {
+        Id = species.Id,
+        CommonName = species.CommonName,
+        ScientificName = species.ScientificName,
+        Height = species.Height,
+        Weight = species.Weight,
+        Diet = species.Diet,
+        Habitat = species.Habitat,
+        Curiosities = species.Curiosities,
+        GbifTaxonKey = ParseTaxonKey(species.Id),
+        Group = species.Group,
+        Rarity = species.Rarity,
+        Difficulty = species.Difficulty,
+        Size = species.Size,
+        Conservation = species.Conservation
+    };
+
+    // IDs de espécies do GBIF têm a forma "gbif-{chave}".
+    static long ParseTaxonKey(string id) =>
+        id.StartsWith("gbif-", StringComparison.OrdinalIgnoreCase) &&
+        long.TryParse(id.AsSpan(5), out var key)
+            ? key
+            : 0;
 
     // Id único por criação: dois packs com o mesmo nome não se substituem.
     static string BuildPackId(string packName)

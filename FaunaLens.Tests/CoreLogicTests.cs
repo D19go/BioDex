@@ -116,11 +116,12 @@ public sealed class BuilderNameTests
         Assert.Equal("Saracura-três-potes", FaunaPackBuilder.GbifClient.PickVernacularName(names));
     }
 
+    // Inglês não entra mais: sem português nem nome indígena, o catálogo usa o nome científico.
     [Fact]
-    public void FallsBackToEnglishWhenNoPortuguese()
+    public void DoesNotFallBackToEnglishWhenNoPortuguese()
     {
         var names = new[] { N("tur", "Büyük Orman Kılavuzu"), N("eng", "Giant Wood Rail") };
-        Assert.Equal("Giant Wood Rail", FaunaPackBuilder.GbifClient.PickVernacularName(names));
+        Assert.Null(FaunaPackBuilder.GbifClient.PickVernacularName(names));
     }
 
     [Fact]

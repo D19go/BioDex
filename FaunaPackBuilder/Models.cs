@@ -13,6 +13,13 @@ public sealed class SpeciesInput
     public string Habitat { get; set; } = "";
     public string Curiosities { get; set; } = "";
     public long GbifTaxonKey { get; set; }
+
+    // Dados do documento de pontuação. Zero = ainda não curado.
+    public string Group { get; set; } = "";
+    public int Rarity { get; set; }
+    public int Difficulty { get; set; }
+    public int Size { get; set; }
+    public int Conservation { get; set; }
 }
 
 public sealed class GbifSearchResponse
@@ -59,6 +66,12 @@ public sealed class GbifTaxonResponse
     [JsonPropertyName("rank")]
     public string? Rank { get; set; }
 
+    [JsonPropertyName("phylum")]
+    public string? Phylum { get; set; }
+
+    [JsonPropertyName("class")]
+    public string? Class { get; set; }
+
     [JsonPropertyName("kingdom")]
     public string? Kingdom { get; set; }
 }
@@ -76,6 +89,9 @@ public sealed class GbifVernacularName
 
     [JsonPropertyName("language")]
     public string? Language { get; set; }
+
+    [JsonPropertyName("preferred")]
+    public bool? Preferred { get; set; }
 }
 
 public sealed class GbifOccurrence
@@ -180,4 +196,5 @@ public sealed class PackBuildSettings
     public int MaxSpecies { get; set; }
     public int SearchPages { get; set; }
     public bool AllowBySa { get; set; }
+    public int ImagesPerSpecies { get; set; }
 }

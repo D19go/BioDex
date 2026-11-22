@@ -2,13 +2,13 @@
 
 **Português** | [English](#english)
 
-> ⚠️ **Status: em desenvolvimento.** Nenhuma função está finalizada e há erros conhecidos. O projeto ainda não foi validado em aparelhos reais.
+> ⚠️ **Status: em desenvolvimento.** Nenhuma função está finalizada e há erros conhecidos. Os testes foram feitos em um aparelho ou em um pequeno número de aparelhos, então o app ainda não foi validado em uma variedade maior de celulares.
 
 Aplicativo Android que identifica animais a partir de fotos usando inteligência artificial, pensado para quem está em trilhas e áreas com pouco ou nenhum sinal de internet.
 
 ## Baixar o APK
 
-O APK de teste mais recente fica na aba **[Releases](https://github.com/D19go/BioDex/releases/tag/ultima-versao)** (arquivo `BioDex-debug.apk`). Ele é gerado automaticamente e só é publicado depois que os testes e as compilações passam. Para instalar, permita a instalação de apps de fontes desconhecidas no Android. Na primeira abertura, toque em "Baixar BioCLIP offline" (o modelo tem algumas centenas de MB; use Wi-Fi). O modelo é salvo em `Download/Biodex_Models`, então continua no celular mesmo se o app for desinstalado. Para apagá-lo, basta excluir essa pasta.
+O APK de teste mais recente fica na aba **[Releases](https://github.com/D19go/BioDex/releases/tag/ultima-versao)** (arquivo `BioDex-debug.apk`). Ele é gerado automaticamente e só é publicado depois que os testes e as compilações passam. Para instalar, permita a instalação de apps de fontes desconhecidas no Android. Na primeira abertura, toque em "Baixar BioCLIP offline" (o modelo tem algumas centenas de MB; use Wi-Fi). O modelo é salvo em `Download/BioDex/Biodex_Models`, então continua no celular mesmo se o app for desinstalado. Os packs ficam em `Download/BioDex/FaunaPacks`. Para apagar o modelo ou os packs, basta excluir essas pastas.
 
 ## Para quem é
 
@@ -73,13 +73,13 @@ Hoje o escopo é o **Rio Grande do Sul** (bioma Pampa). O APK não traz espécie
 
 # BioDex 🐾 (English)
 
-> ⚠️ **Status: work in progress.** No feature is finished yet and there are known bugs. The project has not been validated on real devices.
+> ⚠️ **Status: work in progress.** No feature is finished yet and there are known bugs. Testing so far has been done on one device or a small number of devices, so the app has not yet been validated on a wider range of phones.
 
 An Android app that identifies animals from photos using AI, designed for hikers and anyone in areas with weak or no internet.
 
 ## Download the APK
 
-The latest test APK is on the **[Releases](https://github.com/D19go/BioDex/releases/tag/ultima-versao)** tab (`BioDex-debug.apk`). It is built automatically and only published after tests and builds pass. To install it, allow installing apps from unknown sources on Android. On first launch, tap "Baixar BioCLIP offline" (the model is a few hundred MB; use Wi-Fi). The model is saved in `Download/Biodex_Models`, so it stays on the phone even if the app is uninstalled. To delete it, just remove that folder.
+The latest test APK is on the **[Releases](https://github.com/D19go/BioDex/releases/tag/ultima-versao)** tab (`BioDex-debug.apk`). It is built automatically and only published after tests and builds pass. To install it, allow installing apps from unknown sources on Android. On first launch, tap "Baixar BioCLIP offline" (the model is a few hundred MB; use Wi-Fi). The model is saved in `Download/BioDex/Biodex_Models`, so it stays on the phone even if the app is uninstalled. Packs are stored in `Download/BioDex/FaunaPacks`. To delete the model or the packs, just remove those folders.
 
 ## Who it's for
 

@@ -9,7 +9,8 @@ public static class ResultFormatter
     // (fotos de espécies do pacote vs. fotos de outras coisas).
     public const float MinConfidentScore = 0.60f;
 
-    public static string Format(IReadOnlyList<SpeciesMatch> matches)
+    // includeAlternatives = false quando a tela mostra as outras possibilidades em outro lugar (abaixo das fotos).
+    public static string Format(IReadOnlyList<SpeciesMatch> matches, bool includeAlternatives = true)
     {
         if (matches.Count == 0) return "Nenhuma espécie com embedding disponível no pacote atual.";
 
@@ -53,13 +54,27 @@ public static class ResultFormatter
             sb.AppendLine(best.Species.Curiosities);
         }
 
-        if (matches.Count > 1)
+        if (includeAlternatives)
         {
-            sb.AppendLine();
-            sb.AppendLine("OUTRAS POSSIBILIDADES");
-            foreach (var m in matches.Skip(1)) sb.AppendLine($"• {m.Species.CommonName}: {m.Score:P1}");
+            var alternatives = FormatAlternatives(matches);
+            if (alternatives.Length > 0)
+            {
+                sb.AppendLine();
+                sb.Append(alternatives);
+            }
         }
 
+        return sb.ToString();
+    }
+
+    // Outras possibilidades da identificação confiante. Vazio quando não há o que mostrar.
+    public static string FormatAlternatives(IReadOnlyList<SpeciesMatch> matches)
+    {
+        if (matches.Count < 2 || matches[0].Score < MinConfidentScore) return "";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("OUTRAS POSSIBILIDADES");
+        foreach (var m in matches.Skip(1)) sb.AppendLine($"• {m.Species.CommonName}: {m.Score:P1}");
         return sb.ToString();
     }
 }

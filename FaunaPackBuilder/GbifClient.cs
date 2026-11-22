@@ -11,10 +11,15 @@ public sealed class GbifClient : IDisposable
     readonly HttpClient client;
     readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
 
+    // Limites por requisição. Sem eles, uma resposta travada do GBIF prendia a criação por minutos, sem log.
+    static readonly TimeSpan JsonTimeout = TimeSpan.FromSeconds(90);
+    static readonly TimeSpan ImageTimeout = TimeSpan.FromSeconds(45);
+    const int JsonAttempts = 3;
+
     public GbifClient()
     {
         client = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("FaunaPackBuilder/1.2 (Fauna Lens)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("FaunaPackBuilder/1.2 (Biodex)");
     }
 
     public async Task<List<GbifOccurrence>> SearchImagesAsync(
@@ -23,9 +28,10 @@ public sealed class GbifClient : IDisposable
         string stateProvince,
         int maxPages,
         CancellationToken ct,
-        Action<int, int>? pageProgress = null)
+        Action<int, int>? pageProgress = null,
+        long taxonKey = 0)
     {
-        if (string.IsNullOrWhiteSpace(scientificName))
+        if (taxonKey <= 0 && string.IsNullOrWhiteSpace(scientificName))
             return new();
 
         const int pageSize = 300;
@@ -36,12 +42,19 @@ public sealed class GbifClient : IDisposable
         {
             ct.ThrowIfCancellationRequested();
             var offset = page * pageSize;
+            // Pela chave da espécie evita homônimos e nomes ambíguos. Sem chave, usa o nome científico.
+            var taxon = taxonKey > 0
+                ? $"?taxonKey={taxonKey}"
+                : $"?scientificName={Uri.EscapeDataString(scientificName)}";
             var url = $"{ApiRoot}/occurrence/search" +
-                      $"?scientificName={Uri.EscapeDataString(scientificName)}" +
+                      taxon +
                       $"&country={Uri.EscapeDataString(countryCode)}" +
                       (string.IsNullOrWhiteSpace(stateProvince) ? "" : $"&stateProvince={Uri.EscapeDataString(stateProvince)}") +
                       "&kingdom=Animalia" +
                       "&media_type=StillImage" +
+                      // Observações de pessoas e de câmeras: fica de fora o material de coleção (crânios, peles, espécimes).
+                      "&basisOfRecord=HUMAN_OBSERVATION" +
+                      "&basisOfRecord=MACHINE_OBSERVATION" +
                       "&occurrenceStatus=present" +
                       "&taxonRank=SPECIES" +
                       $"&limit={pageSize}&offset={offset}";
@@ -135,6 +148,8 @@ public sealed class GbifClient : IDisposable
 
         log?.Invoke($"GBIF encontrou {selected.Count} espécies candidatas na área consultada.");
 
+        var rarityByKey = RarityByKey(selected);
+
         var output = new List<SpeciesInput>();
         foreach (var item in selected)
         {
@@ -167,7 +182,9 @@ public sealed class GbifClient : IDisposable
                 Id = $"gbif-{key}",
                 GbifTaxonKey = key,
                 ScientificName = scientific.Trim(),
-                CommonName = string.IsNullOrWhiteSpace(common) ? scientific.Trim() : common.Trim()
+                CommonName = string.IsNullOrWhiteSpace(common) ? scientific.Trim() : common.Trim(),
+                Group = GroupFor(taxon.Phylum, taxon.Class),
+                Rarity = rarityByKey.GetValueOrDefault(key, 10)
             });
 
             log?.Invoke($"  catálogo: {output.Count}/{maximumSpecies} — {output[^1].CommonName} ({scientific}) — {item.Value} ocorrências");
@@ -176,6 +193,37 @@ public sealed class GbifClient : IDisposable
         }
 
         return output;
+    }
+
+    // Grupo do catálogo, pelo filo e pela classe do GBIF. Vazio quando não há como classificar.
+    public static string GroupFor(string? phylum, string? className)
+    {
+        if (string.IsNullOrWhiteSpace(phylum))
+            return "";
+
+        if (!string.Equals(phylum, "Chordata", StringComparison.OrdinalIgnoreCase))
+            return "Invertebrados";
+
+        return (className ?? "").ToLowerInvariant() switch
+        {
+            "mammalia" => "Mamíferos",
+            "aves" => "Aves",
+            "reptilia" => "Répteis",
+            "amphibia" => "Anfíbios",
+            "actinopterygii" or "chondrichthyes" or "sarcopterygii" or "cephalaspidomorphi" or "myxini" => "Peixes",
+            _ => ""
+        };
+    }
+
+    // Raridade de 5 a 20: quanto menos ocorrências na área consultada, maior a nota.
+    static Dictionary<long, int> RarityByKey(IReadOnlyList<KeyValuePair<long, int>> selected)
+    {
+        var ordered = selected.OrderBy(item => item.Value).ToList();
+        var count = ordered.Count;
+        var result = new Dictionary<long, int>();
+        for (var index = 0; index < count; index++)
+            result[ordered[index].Key] = count <= 1 ? 12 : 20 - (int)Math.Round(15.0 * index / (count - 1));
+        return result;
     }
 
     public async Task<byte[]> DownloadImageAsync(
@@ -189,9 +237,19 @@ public sealed class GbifClient : IDisposable
         var hash = Convert.ToHexString(
             MD5.HashData(Encoding.UTF8.GetBytes(media.Identifier))).ToLowerInvariant();
         var url = $"{ApiRoot}/image/cache/800x/occurrence/{occurrence.Key}/media/{hash}";
-        using var response = await client.GetAsync(url, ct);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsByteArrayAsync(ct);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(ImageTimeout);
+        try
+        {
+            using var response = await client.GetAsync(url, timeout.Token);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsByteArrayAsync(timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Só o limite de tempo cancelou: vira erro comum, para o chamador pular esta imagem.
+            throw new TimeoutException($"o GBIF não entregou a imagem em {ImageTimeout.TotalSeconds:0} s");
+        }
     }
 
     async Task<string?> GetBestVernacularNameAsync(long key, CancellationToken ct)
@@ -209,30 +267,70 @@ public sealed class GbifClient : IDisposable
         }
     }
 
-    // Prefere português; na falta dele, inglês. Nunca usa um idioma arbitrário (já apareceu
-    // um nome em turco): sem nome em pt/en o catálogo usa o nome científico.
-    internal static string? PickVernacularName(IEnumerable<GbifVernacularName>? names)
+    // Ordem: português (BR) e, na falta dele, nome em língua indígena, que fica no original.
+    // Nenhum outro idioma entra: sem nome nesses dois grupos, o catálogo usa o nome científico.
+    // Os códigos indígenas são os mais prováveis no GBIF; ajuste pelos nomes que aparecerem.
+    static readonly string[] IndigenousLanguageCodes = { "gn", "grn", "gug", "tup", "tpn", "yrl", "kgp" };
+
+    public static string? PickVernacularName(IEnumerable<GbifVernacularName>? names)
     {
         if (names is null)
             return null;
 
         var list = names.Where(x => !string.IsNullOrWhiteSpace(x.VernacularName)).ToList();
 
-        static bool Is(GbifVernacularName x, params string[] codes) =>
-            codes.Any(c => string.Equals(x.Language, c, StringComparison.OrdinalIgnoreCase));
+        // Dentro do mesmo grupo, o nome marcado como preferido pelo GBIF vem primeiro.
+        static string? First(IEnumerable<GbifVernacularName> source, Func<string, bool> language) =>
+            source.Where(x => language(x.Language ?? ""))
+                  .OrderByDescending(x => x.Preferred == true)
+                  .Select(x => x.VernacularName!.Trim())
+                  .FirstOrDefault();
 
-        return list.FirstOrDefault(x => Is(x, "por", "pt"))?.VernacularName
-            ?? list.FirstOrDefault(x => Is(x, "eng", "en"))?.VernacularName;
+        return First(list, IsPortuguese) ?? First(list, IsIndigenous);
     }
+
+    static bool IsPortuguese(string language) =>
+        language.Equals("por", StringComparison.OrdinalIgnoreCase) ||
+        language.Equals("pt", StringComparison.OrdinalIgnoreCase) ||
+        language.StartsWith("pt-", StringComparison.OrdinalIgnoreCase) ||
+        language.StartsWith("pt_", StringComparison.OrdinalIgnoreCase);
+
+    static bool IsIndigenous(string language) =>
+        IndigenousLanguageCodes.Any(code => language.Equals(code, StringComparison.OrdinalIgnoreCase));
 
     async Task<T?> GetJsonAsync<T>(string url, CancellationToken ct)
     {
-        using var response = await client.GetAsync(url, ct);
-        if (response.StatusCode == HttpStatusCode.NotFound)
-            return default;
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        return await JsonSerializer.DeserializeAsync<T>(stream, json, ct);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await GetJsonOnceAsync<T>(url, ct);
+            }
+            catch (TimeoutException) when (attempt < JsonAttempts)
+            {
+                Log?.Invoke($"  GBIF sem resposta (tentativa {attempt}/{JsonAttempts}); tentando de novo...");
+                await Task.Delay(TimeSpan.FromSeconds(2), ct);
+            }
+        }
+    }
+
+    async Task<T?> GetJsonOnceAsync<T>(string url, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(JsonTimeout);
+        try
+        {
+            using var response = await client.GetAsync(url, timeout.Token);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return default;
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+            return await JsonSerializer.DeserializeAsync<T>(stream, json, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"o GBIF não respondeu em {JsonTimeout.TotalSeconds:0} s");
+        }
     }
 
     public Action<string>? Log { get; set; }

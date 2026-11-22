@@ -23,16 +23,24 @@ public static class PackWriter
         string? packIdOverride = null,
         PackBuildSettings? buildSettings = null)
     {
-        var referencesPerSpecies = species.Count == 0 ? 0 : species[0].References.Count;
-        if (referencesPerSpecies < 1)
-            throw new InvalidOperationException("O pack precisa ter pelo menos 1 imagem por espécie.");
+        if (species.Count == 0)
+            throw new InvalidOperationException("O pack precisa ter pelo menos 1 espécie.");
 
-        if (species.Any(x => x.References.Count != referencesPerSpecies || x.Embeddings.Count != referencesPerSpecies))
-            throw new InvalidOperationException("Todas as espécies precisam ter a mesma quantidade de imagens e embeddings.");
+        // Cada espécie pode ter menos imagens que as outras (pack parcial ou ampliado).
+        var counts = species.Select(x => x.References.Count).ToList();
+        if (counts.Min() < 1)
+            throw new InvalidOperationException("Toda espécie do pack precisa de pelo menos 1 imagem.");
+        if (species.Any(x => x.Embeddings.Count != x.References.Count))
+            throw new InvalidOperationException("Cada imagem do pack precisa de um embedding.");
+
+        // Mesma quantidade em todas as espécies: formato 1, igual ao de sempre. Caso contrário: formato 2.
+        var formatVersion = counts.All(c => c == counts[0]) ? 1 : 2;
+        var referencesPerSpecies = counts.Max();
 
         var packId = packIdOverride ?? Slug(packName);
         var manifest = new PackManifest
         {
+            FormatVersion = formatVersion,
             PackId = packId,
             PackName = packName,
             CreatedUtc = DateTime.UtcNow.ToString("O"),
@@ -61,7 +69,7 @@ public static class PackWriter
         using (var writer = new BinaryWriter(stream))
         {
             writer.Write(Encoding.ASCII.GetBytes("FLPK"));
-            writer.Write(1);
+            writer.Write(formatVersion);
             writer.Write(species.Count);
             writer.Write(referencesPerSpecies);
             writer.Write(512);

@@ -8,7 +8,8 @@ using FaunaLens.Services;
 
 namespace FaunaLens;
 
-// Lista os FaunaPacks instalados, escolhe o usado na identificação e liga/desliga a criação automática por região.
+// Lista os FaunaPacks instalados. Marcar um pack o inclui na identificação (vários podem estar ativos);
+// tocar no nome escolhe o pack para atualizar e ver propriedades. Também liga/desliga a criação automática por região.
 [Activity(Label = "Gerenciar FaunaPacks", Exported = false, ScreenOrientation = ScreenOrientation.Portrait)]
 public sealed class PackManagerActivity : Activity
 {
@@ -19,6 +20,7 @@ public sealed class PackManagerActivity : Activity
     string? selectedPackId;
     LinearLayout? packList;
     Button? updateButton;
+    Button? propertiesButton;
     CheckBox? autoCheck;
     TextView? message;
 
@@ -40,7 +42,7 @@ public sealed class PackManagerActivity : Activity
         var content = new LinearLayout(this) { Orientation = Orientation.Vertical };
         scroll.AddView(content);
         root.AddView(scroll, new LinearLayout.LayoutParams(-1, -1));
-        SetContentView(root);
+        SetContentView(BottomNavigation.Wrap(this, root));
 
         var title = new TextView(this) { Text = "Gerenciar FaunaPacks", TextSize = 24 };
         title.SetTypeface(null, Android.Graphics.TypefaceStyle.Bold);
@@ -48,7 +50,8 @@ public sealed class PackManagerActivity : Activity
 
         content.AddView(new TextView(this)
         {
-            Text = "O pack selecionado é o usado na identificação. Toque em um pack para usá-lo."
+            Text = "Marque os packs que a identificação usa (pode marcar vários). " +
+                   "Toque no nome de um pack para escolhê-lo para atualizar ou ver propriedades."
         });
 
         packList = new LinearLayout(this) { Orientation = Orientation.Vertical };
@@ -58,6 +61,10 @@ public sealed class PackManagerActivity : Activity
         updateButton = new Button(this) { Text = "Atualizar pack selecionado com mais imagens", Enabled = false };
         updateButton.Click += (_, _) => RequestUpdate();
         content.AddView(updateButton);
+
+        propertiesButton = new Button(this) { Text = "Propriedades do pack selecionado", Enabled = false };
+        propertiesButton.Click += (_, _) => OpenProperties();
+        content.AddView(propertiesButton);
 
         var autoTitle = new TextView(this) { Text = "Criação automática por região", TextSize = 18 };
         autoTitle.SetTypeface(null, Android.Graphics.TypefaceStyle.Bold);
@@ -77,7 +84,7 @@ public sealed class PackManagerActivity : Activity
             TextSize = 13,
             Text = "Usa a localização aproximada do celular, verificada ao abrir o app (no máximo a cada 10 minutos). " +
                    "A primeira detecção só registra o estado. Quando o estado muda, cria sozinho um pack da nova região " +
-                   "(50 espécies, 2 imagens cada) em segundo plano. Se a região já tiver um pack, não cria outro."
+                   "em segundo plano. Se a região já tiver um pack, amplia esse pack com imagens novas, sem repetir as que ele já tem."
         });
 
         message = new TextView(this) { TextSize = 13 };
@@ -90,58 +97,72 @@ public sealed class PackManagerActivity : Activity
         try
         {
             packs = await packManager.ListAsync();
+            var enabled = await packManager.GetEnabledPackIdsAsync();
+
+            var activeId = packManager.GetActivePackId();
+            selectedPackId = packs.Any(pack => pack.PackId == activeId) ? activeId : null;
+
+            packList!.RemoveAllViews();
+            if (packs.Count == 0)
+            {
+                packList.AddView(new TextView(this)
+                {
+                    Text = "Nenhum FaunaPack instalado. Crie um por região ou importe um .faunapack na tela principal."
+                });
+            }
+            else
+            {
+                foreach (var pack in packs)
+                    packList.AddView(BuildRow(pack, enabled.Contains(pack.PackId)));
+            }
+
+            updateButton!.Enabled = selectedPackId is not null;
+            propertiesButton!.Enabled = selectedPackId is not null;
         }
         catch (Exception ex)
         {
             message!.Text = $"Falha ao listar FaunaPacks: {ex.Message}";
-            return;
         }
+    }
 
-        var activeId = packManager.GetActivePackId();
-        selectedPackId = packs.Any(pack => pack.PackId == activeId) ? activeId : null;
+    View BuildRow(InstalledFaunaPack pack, bool enabled)
+    {
+        var id = pack.PackId;
+        var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        row.SetPadding(0, 8, 0, 8);
 
-        packList!.RemoveAllViews();
-        if (packs.Count == 0)
-        {
-            packList.AddView(new TextView(this)
-            {
-                Text = "Nenhum FaunaPack instalado. Crie um por região ou importe um .faunapack na tela principal."
-            });
-        }
-        else
-        {
-            // RadioGroup garante que só um pack fica selecionado por vez.
-            var group = new RadioGroup(this) { Orientation = Orientation.Vertical };
-            foreach (var pack in packs)
-            {
-                var id = pack.PackId;
-                var radio = new RadioButton(this)
-                {
-                    Text = Describe(pack),
-                    Checked = id == selectedPackId
-                };
-                radio.Click += (_, _) => SelectPack(id);
-                group.AddView(radio);
-            }
+        var check = new CheckBox(this) { Checked = enabled };
+        check.Click += (_, _) => SetEnabled(id, check.Checked);
+        row.AddView(check);
 
-            packList.AddView(group);
-        }
+        var selected = id == selectedPackId ? "\n(selecionado para atualizar e ver propriedades)" : "";
+        var label = new TextView(this) { Text = Describe(pack) + selected };
+        label.SetPadding(8, 0, 0, 0);
+        label.Click += (_, _) => SelectPack(id);
+        row.AddView(label, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        updateButton!.Enabled = selectedPackId is not null;
+        return row;
     }
 
     static string Describe(InstalledFaunaPack pack)
     {
         var scope = pack.Region.Length == 0 ? string.Empty : $" · {pack.Region}";
-        return $"{pack.PackName}\n{pack.SpeciesCount} espécies × {pack.ReferencesPerSpecies} imagens{scope}";
+        return $"{pack.PackName}\n{pack.SpeciesCount} espécies · até {pack.ReferencesPerSpecies} imagens por espécie{scope}";
+    }
+
+    void SetEnabled(string packId, bool enabled)
+    {
+        packManager.SetPackEnabled(packId, enabled);
+        message!.Text = enabled
+            ? "Pack incluído na identificação. A tela principal carrega os packs marcados ao voltar."
+            : "Pack removido da identificação. A tela principal carrega os packs marcados ao voltar.";
     }
 
     void SelectPack(string packId)
     {
-        selectedPackId = packId;
         packManager.SetActivePackId(packId);
-        updateButton!.Enabled = true;
-        message!.Text = "Pack selecionado para a identificação. A tela principal carrega ele ao voltar.";
+        message!.Text = "Pack escolhido para atualizar e ver propriedades.";
+        _ = RefreshPacksAsync();
     }
 
     // A atualização refaz o pack na tela de criação, então a tela principal é quem a abre (libera o BioCLIP dela antes).
@@ -157,6 +178,21 @@ public sealed class PackManagerActivity : Activity
         var intent = new Intent().PutExtra(PackBuilderActivity.ExtraUpdatePackDirectory, pack.DirectoryPath);
         SetResult(Result.Ok, intent);
         Finish();
+    }
+
+    // Nome e quantidade de imagens de cada espécie do pack escolhido.
+    void OpenProperties()
+    {
+        var pack = packs.FirstOrDefault(x => x.PackId == selectedPackId);
+        if (pack is null)
+        {
+            message!.Text = "Escolha um pack primeiro.";
+            return;
+        }
+
+        var intent = new Intent(this, typeof(PackPropertiesActivity));
+        intent.PutExtra(PackPropertiesActivity.ExtraPackDirectory, pack.DirectoryPath);
+        StartActivity(intent);
     }
 
     void OnAutoToggled(bool enable)

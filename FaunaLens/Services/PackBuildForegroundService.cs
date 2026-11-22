@@ -71,8 +71,21 @@ public sealed class PackBuildForegroundService : Service
             if (!engine.IsReady)
                 throw new InvalidOperationException("Não foi possível carregar o BioCLIP.");
 
+            // Se já existe um pack desta região (ou o escolhido para atualizar), ele é ampliado em vez de refeito.
+            var baseline = await new FaunaPackManager().FindBaselineAsync(options, token);
+            if (baseline is not null)
+            {
+                if (baseline.Region.Length > 0)
+                    options.StateProvince = baseline.Region == BrazilRegions.WholeCountry ? "" : baseline.Region;
+                journal.Log($"Já existe o pack \"{baseline.PackName}\" desta região: ele será ampliado, sem repetir imagens.");
+            }
+
             var builder = new AppPackBuilder(engine, journal.Log, journal.Progress);
-            var zip = await builder.BuildToFileAsync(options, token);
+            // Checkpoints instalam o pack parcial: se a criação parar, o que já foi baixado continua no pack.
+            var zip = await builder.BuildToFileAsync(options, baseline, token, async path =>
+            {
+                await new FaunaPackManager().InstallAsync(path, CancellationToken.None);
+            });
             try
             {
                 journal.Log("Instalando e ativando o pack...");
@@ -97,7 +110,7 @@ public sealed class PackBuildForegroundService : Service
         catch (System.OperationCanceledException)
         {
             journal.Mutate(s => s.Status = "cancelled");
-            journal.Log("Criação cancelada.");
+            journal.Log("Criação cancelada. O que já foi baixado continua salvo no pack.");
         }
         catch (Exception ex)
         {
@@ -206,7 +219,7 @@ public sealed class PackBuildForegroundService : Service
     Notification BuildNotification(string text, int progress, bool indeterminate, bool ongoing)
     {
         var builder = new NotificationCompat.Builder(this, ChannelId)
-            .SetContentTitle("Fauna Lens")
+            .SetContentTitle("Biodex")
             .SetContentText(text)
             .SetSmallIcon(Android.Resource.Drawable.IcMenuGallery)
             .SetOngoing(ongoing)
