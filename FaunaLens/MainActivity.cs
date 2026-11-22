@@ -37,6 +37,7 @@ public sealed class MainActivity : Activity
     Button? searchButton;
     LinearLayout? identifyOverlay;
     LinearLayout? drawerPanel;
+    LinearLayout? feedLayout;
     View? drawerScrim;
     TextView? result;
     Button? identifyButton;
@@ -81,6 +82,7 @@ public sealed class MainActivity : Activity
     {
         base.OnResume();
         RefreshPoints();
+        RefreshFeed();
         RefreshDownloadState();
         StartDownloadPolling();
         CheckPackBuildResult();
@@ -258,10 +260,10 @@ public sealed class MainActivity : Activity
         page.AddView(headerLine, new LinearLayout.LayoutParams(-1, Dp(2)));
 
         var feedScroll = new ScrollView(this);
-        var feed = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        feed.SetPadding(Dp(16), Dp(16), Dp(16), Dp(160));
-        AddSamplePosts(feed);
-        feedScroll.AddView(feed);
+        feedLayout = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        feedLayout.SetPadding(Dp(16), Dp(16), Dp(16), Dp(160));
+        RefreshFeed();
+        feedScroll.AddView(feedLayout);
         page.AddView(feedScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
         frame.AddView(page, new FrameLayout.LayoutParams(-1, -1));
 
@@ -271,9 +273,17 @@ public sealed class MainActivity : Activity
         identifyOverlay.SetPadding(Dp(16), Dp(12), Dp(16), Dp(16));
         identifyOverlay.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(16, 12));
 
+        var identifyTop = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        identifyTop.SetGravity(GravityFlags.CenterVertical);
+
         var closeIdentify = new Button(this) { Text = "✕ Fechar" };
         closeIdentify.Click += (_, _) => SetIdentifyOpen(false);
-        identifyOverlay.AddView(closeIdentify, new LinearLayout.LayoutParams(-2, -2));
+        identifyTop.AddView(closeIdentify, new LinearLayout.LayoutParams(-2, -2));
+        identifyTop.AddView(new View(this), new LinearLayout.LayoutParams(0, 0, 1f));
+
+        var newPostFromIdentify = CreateNewPostButton(48, 22);
+        identifyTop.AddView(newPostFromIdentify, new LinearLayout.LayoutParams(Dp(48), Dp(48)));
+        identifyOverlay.AddView(identifyTop, new LinearLayout.LayoutParams(-1, -2));
 
         var identifyScroll = new ScrollView(this);
         var identifyContent = new LinearLayout(this) { Orientation = Orientation.Vertical };
@@ -336,6 +346,14 @@ public sealed class MainActivity : Activity
         frame.AddView(searchButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.End | GravityFlags.Bottom)
         {
             RightMargin = Dp(20),
+            BottomMargin = Dp(24)
+        });
+
+        // Botão + no canto inferior esquerdo: cria uma publicação.
+        var newPostButton = CreateNewPostButton(60, 26);
+        frame.AddView(newPostButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.Start | GravityFlags.Bottom)
+        {
+            LeftMargin = Dp(20),
             BottomMargin = Dp(24)
         });
 
@@ -462,6 +480,85 @@ public sealed class MainActivity : Activity
     void Toast(string text)
     {
         Android.Widget.Toast.MakeText(this, text, ToastLength.Short)?.Show();
+    }
+
+    Button CreateNewPostButton(int sizeDp, float textSize)
+    {
+        var button = new Button(this) { Text = "+", TextSize = textSize };
+        button.SetAllCaps(false);
+        button.SetTextColor(HudGreen);
+        button.Background = Circle(HudCard, HudGreen, 2);
+        button.ContentDescription = "Nova publicação";
+        button.Click += (_, _) => StartActivity(new Intent(this, typeof(PostComposerActivity)));
+        return button;
+    }
+
+    // Publicações do usuário (mais recentes primeiro), seguidas dos exemplos.
+    void RefreshFeed()
+    {
+        if (feedLayout is null)
+            return;
+
+        feedLayout.RemoveAllViews();
+        foreach (var post in PostStore.Load(this))
+            feedLayout.AddView(BuildUserPostCard(post), new LinearLayout.LayoutParams(-1, -2) { BottomMargin = Dp(16) });
+
+        AddSamplePosts(feedLayout);
+    }
+
+    View BuildUserPostCard(SavedPost post)
+    {
+        var card = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        card.SetPadding(Dp(14), Dp(14), Dp(14), Dp(14));
+        card.Background = Rounded(HudCard, 16, HudGreen, 2);
+
+        var top = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        top.SetGravity(GravityFlags.CenterVertical);
+
+        var initial = string.IsNullOrWhiteSpace(post.Author) ? "?" : post.Author.Substring(0, 1).ToUpperInvariant();
+        var avatar = new TextView(this) { Text = initial, TextSize = 16 };
+        avatar.Gravity = GravityFlags.Center;
+        avatar.SetTextColor(Color.White);
+        avatar.Background = Circle(Color.Rgb(40, 110, 40), HudGreen, 2);
+        top.AddView(avatar, new LinearLayout.LayoutParams(Dp(46), Dp(46)));
+
+        var name = new TextView(this) { Text = post.Author, TextSize = 16 };
+        name.SetTypeface(null, TypefaceStyle.Bold);
+        name.SetTextColor(HudText);
+        name.SetPadding(Dp(12), 0, 0, 0);
+        top.AddView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+        card.AddView(top);
+
+        if (!string.IsNullOrWhiteSpace(post.Caption))
+        {
+            var caption = new TextView(this) { Text = post.Caption, TextSize = 15 };
+            caption.SetTextColor(HudText);
+            caption.SetPadding(0, Dp(10), 0, 0);
+            card.AddView(caption);
+        }
+
+        var image = new ImageView(this);
+        image.SetScaleType(ImageView.ScaleType.CenterCrop);
+        try
+        {
+            if (post.ImagePaths.Count > 0)
+                image.SetImageBitmap(ImageLoader.Load(post.ImagePaths[0], 800));
+        }
+        catch
+        {
+            image.SetBackgroundColor(Color.Rgb(80, 80, 80));
+        }
+        card.AddView(image, new LinearLayout.LayoutParams(-1, Dp(240)) { TopMargin = Dp(12) });
+
+        if (post.ImagePaths.Count > 1)
+        {
+            var more = new TextView(this) { Text = $"+{post.ImagePaths.Count - 1} foto(s)", TextSize = 13 };
+            more.SetTextColor(HudMuted);
+            more.SetPadding(0, Dp(6), 0, 0);
+            card.AddView(more);
+        }
+
+        return card;
     }
 
     // Publicações de exemplo, só para visualizar o feed. Nomes e imagens são fictícios.
