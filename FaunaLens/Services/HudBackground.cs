@@ -5,8 +5,8 @@ using Android.Views;
 
 namespace FaunaLens.Services;
 
-// Fundo visual do app (traduzido do CSS do projeto): gradiente vertical com brilhos verdes suaves.
-// Vale para todas as telas e painéis. O tom segue o tema efetivo do app (ThemeController).
+// Fundo visual do app (traduzido do CSS do projeto): gradiente vertical, brilhos verdes e manchas ovais.
+// Vale para todas as telas e painéis, nos dois temas. O tom segue o tema efetivo do app (ThemeController).
 public static class HudBackground
 {
     // Mesma decisão de tema que ThemeController.Apply, para cores e fundo ficarem coerentes com a escolha do usuário.
@@ -19,9 +19,12 @@ public static class HudBackground
 
     public static void Apply(View view, Context context)
     {
-        var width = context.Resources!.DisplayMetrics!.WidthPixels;
-        var layers = IsDark(context) ? DarkLayers(width) : LightLayers(width);
-        view.Background = new LayerDrawable(layers);
+        var metrics = context.Resources!.DisplayMetrics!;
+        var layers = new List<Drawable>(IsDark(context)
+            ? DarkLayers(metrics.WidthPixels)
+            : LightLayers(metrics.WidthPixels));
+        layers.Add(new BitmapDrawable(context.Resources, Blobs(metrics.WidthPixels, metrics.HeightPixels, metrics.Density)));
+        view.Background = new LayerDrawable(layers.ToArray());
     }
 
     // Escuro: #001006 → #001A08 → #001006, com brilhos verdes.
@@ -42,6 +45,43 @@ public static class HudBackground
         Glow(width, 1.0f, 0.8f, 0.5f, 35, 40, 200, 40),
     };
 
+    // Manchas ovais do CSS (.drawer-panel.dark::before): elipses com gradiente radial que se desfaz a 75% do raio.
+    // Posições em % da tela; tamanhos em dp. Desenhadas na metade da resolução para economizar memória.
+    static Bitmap Blobs(int width, int height, float density)
+    {
+        const float scale = 0.5f;
+        var bitmap = Bitmap.CreateBitmap((int)(width * scale), (int)(height * scale), Bitmap.Config.Argb8888!)!;
+        var canvas = new Canvas(bitmap);
+        canvas.Scale(scale, scale);
+
+        Blob(canvas, 0.04f, 0.20f, 55, 115, 20, 100, 25, 0.25f, width, height, density);
+        Blob(canvas, 0.96f, 0.38f, 65, 130, 15, 85, 25, 0.28f, width, height, density);
+        Blob(canvas, 0.07f, 0.72f, 45, 100, 30, 115, 35, 0.20f, width, height, density);
+        Blob(canvas, 0.94f, 0.90f, 75, 140, 20, 105, 30, 0.23f, width, height, density);
+        Blob(canvas, 0.50f, 0.50f, 100, 55, 15, 75, 20, 0.10f, width, height, density);
+        return bitmap;
+    }
+
+    static void Blob(Canvas canvas, float xPercent, float yPercent, float radiusXDp, float radiusYDp,
+        int red, int green, int blue, float opacity, int width, int height, float density)
+    {
+        var alpha = (int)Math.Round(opacity * 255);
+        canvas.Save();
+        canvas.Translate(xPercent * width, yPercent * height);
+        canvas.Scale(radiusXDp * density, radiusYDp * density);
+
+        var paint = new Paint { AntiAlias = true };
+        paint.SetShader(new RadialGradient(
+            0f, 0f, 1f,
+            new[] { Argb(alpha, red, green, blue), Argb(0, red, green, blue) },
+            new[] { 0f, 0.75f },
+            Shader.TileMode.Clamp));
+
+        // Quadrado de -1 a 1 no espaço já escalado: o gradiente circular vira elipse.
+        canvas.DrawRect(-1f, -1f, 1f, 1f, paint);
+        canvas.Restore();
+    }
+
     static GradientDrawable Base(int top, int middle, int bottom) =>
         new(GradientDrawable.Orientation.TopBottom, new[] { top, middle, bottom });
 
@@ -57,7 +97,7 @@ public static class HudBackground
         return glow;
     }
 
-    // Cor ARGB em inteiro, o formato que o GradientDrawable aceita.
+    // Cor ARGB em inteiro, o formato que o GradientDrawable e o RadialGradient aceitam.
     static int Argb(int alpha, int red, int green, int blue) =>
         (alpha << 24) | (red << 16) | (green << 8) | blue;
 }

@@ -9,6 +9,7 @@
     <item name="android:navigationBarColor">#000000</item>
     <item name="android:statusBarColor">#1B5E20</item>
     <item name="android:windowLightStatusBar">false</item>
+    <item name="android:buttonStyle">@style/HudButtonLight</item>
   </style>
 
   <style name="AppThemeDark" parent="android:style/Theme.Material.NoActionBar">
@@ -17,5 +18,17 @@
     <item name="android:navigationBarColor">#000000</item>
     <item name="android:statusBarColor">#000000</item>
     <item name="android:windowLightStatusBar">false</item>
+    <item name="android:buttonStyle">@style/HudButtonDark</item>
+  </style>
+
+  <!-- Botões do app: cor do tema (verde sobre fundo escuro, verde sobre fundo claro). -->
+  <style name="HudButtonDark" parent="android:style/Widget.Material.Button">
+    <item name="android:background">@drawable/hud_button_dark</item>
+    <item name="android:textColor">#FF83D957</item>
+  </style>
+
+  <style name="HudButtonLight" parent="android:style/Widget.Material.Light.Button">
+    <item name="android:background">@drawable/hud_button_light</item>
+    <item name="android:textColor">#FF1E7A0F</item>
   </style>
 </resources>
