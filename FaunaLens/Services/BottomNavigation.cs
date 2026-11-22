@@ -14,8 +14,6 @@ namespace FaunaLens.Services;
 // A tela de publicação e as visualizações em tela cheia não usam este rodapé.
 public static class BottomNavigation
 {
-    public enum Destination { Home, New, Identify, Chats }
-
     static readonly Color Green = Color.Rgb(32, 230, 0);
 
     // Envolve o conteúdo da tela e acrescenta o rodapé embaixo, com o fundo do app por trás dos dois.
@@ -28,8 +26,9 @@ public static class BottomNavigation
         return wrapper;
     }
 
-    // Rodapé em si. Na tela inicial, o botão de identificação pode abrir o painel direto (onIdentify).
-    public static LinearLayout Create(Activity activity, Destination? current = null, Action? onIdentify = null)
+    // Rodapé em si. Na tela inicial, os botões usam onHome (fecha painéis) e onIdentify (abre a lupa).
+    // Nas demais telas, o botão de início volta para a tela inicial.
+    public static LinearLayout Create(Activity activity, Action? onIdentify = null, Action? onHome = null)
     {
         var density = activity.Resources!.DisplayMetrics!.Density;
         int Dp(int value) => (int)(value * density);
@@ -47,16 +46,22 @@ public static class BottomNavigation
         row.SetOnApplyWindowInsetsListener(new BottomInsetsListener(Dp(8)));
         footer.AddView(row, new LinearLayout.LayoutParams(-1, -2));
 
-        void Add(string icon, string description, Destination destination, Action onClick)
+        void Add(string icon, string description, Action onClick)
         {
             var slot = new LinearLayout.LayoutParams(0, Dp(48), 1f) { Gravity = GravityFlags.Center };
-            row.AddView(Item(activity, icon, description, current == destination, onClick), slot);
+            row.AddView(Item(activity, icon, description, onClick), slot);
         }
 
-        Add("🏠", "Início", Destination.Home, () => GoHome(activity));
-        Add("+", "Nova publicação", Destination.New, () =>
+        Add("🏠", "Início", () =>
+        {
+            if (onHome is not null)
+                onHome();
+            else
+                GoHome(activity);
+        });
+        Add("+", "Nova publicação", () =>
             activity.StartActivity(new Intent(activity, typeof(PostComposerActivity))));
-        Add("🔍", "Identificação", Destination.Identify, () =>
+        Add("🔍", "Identificação", () =>
         {
             if (onIdentify is not null)
             {
@@ -68,7 +73,7 @@ public static class BottomNavigation
             MainActivity.OpenIdentifyOnResume = true;
             GoHome(activity);
         });
-        Add("➤", "Chats", Destination.Chats, () =>
+        Add("➤", "Chats", () =>
             Android.Widget.Toast.MakeText(activity, "Chats entram em uma versão futura.", ToastLength.Short)?.Show());
 
         return footer;
@@ -85,7 +90,7 @@ public static class BottomNavigation
         activity.StartActivity(intent);
     }
 
-    static Button Item(Activity activity, string icon, string description, bool active, Action onClick)
+    static Button Item(Activity activity, string icon, string description, Action onClick)
     {
         var button = new Button(activity) { Text = icon, TextSize = 18 };
         button.SetAllCaps(false);
@@ -93,11 +98,12 @@ public static class BottomNavigation
         button.SetMinHeight(0);
         button.SetPadding(0, 0, 0, 0);
         button.ContentDescription = description;
-        button.SetTextColor(active ? Color.Black : Green);
+        button.SetTextColor(Green);
 
+        // Sem fundo nem contorno: todos os ícones iguais, só com a borda de cima.
         var shape = new GradientDrawable();
         shape.SetShape(Android.Graphics.Drawables.ShapeType.Oval);
-        shape.SetColor(active ? Green : Color.Transparent);
+        shape.SetColor(Color.Transparent);
         button.Background = shape;
 
         button.Click += (_, _) => onClick();

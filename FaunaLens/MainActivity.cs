@@ -344,7 +344,7 @@ public sealed class MainActivity : Activity
         frame.AddView(identifyOverlay, new FrameLayout.LayoutParams(-1, -1));
 
         // Rodapé de navegação (casinha, +, lupa, avião): fica sobre a tela inicial e o painel de identificação.
-        frame.AddView(BottomNavigation.Create(this, BottomNavigation.Destination.Home, () => SetIdentifyOpen(true)),
+        frame.AddView(BottomNavigation.Create(this, () => SetIdentifyOpen(true), CloseHomePanels),
             new FrameLayout.LayoutParams(-1, -2, GravityFlags.Bottom));
 
         // Painel lateral (ao tocar no avatar): tema, packs e modelo offline.
@@ -615,6 +615,13 @@ public sealed class MainActivity : Activity
         card.AddView(image, new LinearLayout.LayoutParams(-1, Dp(200)) { TopMargin = Dp(12) });
 
         return card;
+    }
+
+    // Botão de início dentro da tela inicial: fecha a lupa e o painel lateral, deixando o feed à vista.
+    void CloseHomePanels()
+    {
+        SetIdentifyOpen(false);
+        CloseDrawer();
     }
 
     void SetIdentifyOpen(bool open)
