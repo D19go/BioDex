@@ -63,6 +63,15 @@ public sealed class BioClipDownloadService
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
 
+        // 416: o parcial salvo não confere com o arquivo do servidor (maior ou de outra versão).
+        // Apaga o parcial e baixa tudo de novo; sem parcial, o pedido não tem Range e não cai aqui.
+        if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable && existingLength > 0)
+        {
+            File.Delete(temporaryPath);
+            await DownloadAsync(url, destinationPath, progress, cancellationToken);
+            return;
+        }
+
         response.EnsureSuccessStatusCode();
 
         var append = existingLength > 0 && response.StatusCode == HttpStatusCode.PartialContent;
