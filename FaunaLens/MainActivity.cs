@@ -273,17 +273,9 @@ public sealed class MainActivity : Activity
         identifyOverlay.SetPadding(Dp(16), Dp(12), Dp(16), Dp(16));
         identifyOverlay.SetOnApplyWindowInsetsListener(new SystemBarInsetsListener(16, 12));
 
-        var identifyTop = new LinearLayout(this) { Orientation = Orientation.Horizontal };
-        identifyTop.SetGravity(GravityFlags.CenterVertical);
-
         var closeIdentify = new Button(this) { Text = "✕ Fechar" };
         closeIdentify.Click += (_, _) => SetIdentifyOpen(false);
-        identifyTop.AddView(closeIdentify, new LinearLayout.LayoutParams(-2, -2));
-        identifyTop.AddView(new View(this), new LinearLayout.LayoutParams(0, 0, 1f));
-
-        var newPostFromIdentify = CreateNewPostButton(48, 22);
-        identifyTop.AddView(newPostFromIdentify, new LinearLayout.LayoutParams(Dp(48), Dp(48)));
-        identifyOverlay.AddView(identifyTop, new LinearLayout.LayoutParams(-1, -2));
+        identifyOverlay.AddView(closeIdentify, new LinearLayout.LayoutParams(-2, -2));
 
         var identifyScroll = new ScrollView(this);
         var identifyContent = new LinearLayout(this) { Orientation = Orientation.Vertical };
@@ -325,12 +317,8 @@ public sealed class MainActivity : Activity
         identifyContent.AddView(alternatives);
         frame.AddView(identifyOverlay, new FrameLayout.LayoutParams(-1, -1));
 
-        // Botões flutuantes: envio (acima) e lupa (abaixo), no mesmo padrão visual.
-        var sendButton = new Button(this) { Text = "➤", TextSize = 20 };
-        sendButton.SetAllCaps(false);
-        sendButton.SetTextColor(HudGreen);
-        sendButton.Background = Circle(HudCard, HudGreen, 2);
-        sendButton.Click += (_, _) => Toast("As publicações entram quando a rede social estiver pronta.");
+        // Botões flutuantes: publicação + (acima) e lupa (abaixo), no mesmo padrão visual.
+        var sendButton = CreateNewPostButton(60, 26);
         frame.AddView(sendButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.End | GravityFlags.Bottom)
         {
             RightMargin = Dp(20),
