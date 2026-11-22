@@ -49,8 +49,7 @@ public sealed class RankingActivity : Activity
         list = new LinearLayout(this) { Orientation = Orientation.Vertical };
         scroll.AddView(list);
         root.AddView(scroll);
-        SetContentView(root);
-        HudBackground.Apply(root, this);
+        SetContentView(BottomNavigation.Wrap(this, root));
     }
 
     // Atualizado a cada volta para a tela, então a sua linha reflete as identificações feitas.

@@ -138,8 +138,7 @@ public sealed class PackBuilderActivity : Activity
         var content = new LinearLayout(this) { Orientation = Orientation.Vertical };
         scroll.AddView(content);
         root.AddView(scroll);
-        SetContentView(root);
-        HudBackground.Apply(root, this);
+        SetContentView(BottomNavigation.Wrap(this, root));
 
         var settings = target?.BuildSettings;
 

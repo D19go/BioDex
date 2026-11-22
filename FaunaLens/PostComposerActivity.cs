@@ -127,7 +127,6 @@ public sealed class PostComposerActivity : Activity
         actions.AddView(publishButton, new LinearLayout.LayoutParams(Dp(60), Dp(60)));
 
         root.AddView(actions, new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
-        root.AddView(BuildFooter(), new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
         SetContentView(root);
     }
 
@@ -156,38 +155,6 @@ public sealed class PostComposerActivity : Activity
         {
             Toast("Não foi possível trazer a foto da identificação.");
         }
-    }
-
-    // Rodapé de navegação: só aparece nesta tela.
-    View BuildFooter()
-    {
-        var bar = new LinearLayout(this) { Orientation = Orientation.Horizontal };
-        bar.SetGravity(GravityFlags.CenterVertical);
-        bar.SetPadding(Dp(8), Dp(6), Dp(8), Dp(6));
-        bar.Background = Rounded(CardColor, 18, GreenColor, 2);
-
-        var footerSlot = new LinearLayout.LayoutParams(0, Dp(50), 1f);
-        bar.AddView(FooterButton("🏠", "Início", () => Finish()), footerSlot);
-        bar.AddView(FooterButton("+", "Publicação atual", null, active: true), footerSlot);
-        bar.AddView(FooterButton("🔍", "Identificação", () =>
-        {
-            MainActivity.OpenIdentifyOnResume = true;
-            Finish();
-        }), footerSlot);
-        bar.AddView(FooterButton("➤", "Chats", () => Toast("Chats entram em uma versão futura.")), footerSlot);
-        return bar;
-    }
-
-    Button FooterButton(string text, string description, Action? onClick, bool active = false)
-    {
-        var button = new Button(this) { Text = text, TextSize = 18 };
-        button.SetAllCaps(false);
-        button.ContentDescription = description;
-        button.SetTextColor(active ? Color.Black : GreenColor);
-        button.Background = Rounded(active ? GreenColor : Color.Transparent, 999);
-        if (onClick is not null)
-            button.Click += (_, _) => onClick();
-        return button;
     }
 
     Button SmallButton(string text, string description)

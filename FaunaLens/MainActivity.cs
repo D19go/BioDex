@@ -15,7 +15,7 @@ using Uri = Android.Net.Uri;
 namespace FaunaLens;
 
 // Sem Label: o nome do ícone vem do ApplicationTitle do build (Biodex, BioDex1, BioDex2, BioDex3...).
-[Activity(MainLauncher = true, Exported = true, ScreenOrientation = ScreenOrientation.Portrait)]
+[Activity(MainLauncher = true, Exported = true, ScreenOrientation = ScreenOrientation.Portrait, LaunchMode = LaunchMode.SingleTop)]
 public sealed class MainActivity : Activity
 {
     const int CameraRequest = 4101;
@@ -35,7 +35,6 @@ public sealed class MainActivity : Activity
     TextView? identifyStatus;
     TextView? drawerStatus;
     Button? pointsChip;
-    Button? searchButton;
     Button? postFromIdentifyButton;
     string? identifiedPhotoPath;
     int lastAwardedPoints;
@@ -272,7 +271,7 @@ public sealed class MainActivity : Activity
 
         var feedScroll = new ScrollView(this);
         feedLayout = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        feedLayout.SetPadding(Dp(16), Dp(16), Dp(16), Dp(160));
+        feedLayout.SetPadding(Dp(16), Dp(16), Dp(16), Dp(120));
         RefreshFeed();
         feedScroll.AddView(feedLayout);
         page.AddView(feedScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -289,7 +288,9 @@ public sealed class MainActivity : Activity
         identifyOverlay.AddView(closeIdentify, new LinearLayout.LayoutParams(-2, -2));
 
         var identifyScroll = new ScrollView(this);
+        // Espaço embaixo do conteúdo para o rodapé (que fica por cima do painel) não cobrir os botões.
         var identifyContent = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        identifyContent.SetPadding(0, 0, 0, Dp(72));
         identifyScroll.AddView(identifyContent);
         identifyOverlay.AddView(identifyScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
@@ -342,25 +343,9 @@ public sealed class MainActivity : Activity
         identifyContent.AddView(postFromIdentifyButton, new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
         frame.AddView(identifyOverlay, new FrameLayout.LayoutParams(-1, -1));
 
-        // Botões flutuantes: publicação + (acima) e lupa (abaixo), no mesmo padrão visual.
-        var sendButton = CreateNewPostButton(60, 26);
-        frame.AddView(sendButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.End | GravityFlags.Bottom)
-        {
-            RightMargin = Dp(20),
-            BottomMargin = Dp(100)
-        });
-
-        // Botão de lupa flutuante: abre o painel de identificação.
-        searchButton = new Button(this) { Text = "🔍", TextSize = 20 };
-        searchButton.SetAllCaps(false);
-        searchButton.SetTextColor(HudGreen);
-        searchButton.Background = Circle(HudCard, HudGreen, 2);
-        searchButton.Click += (_, _) => SetIdentifyOpen(true);
-        frame.AddView(searchButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.End | GravityFlags.Bottom)
-        {
-            RightMargin = Dp(20),
-            BottomMargin = Dp(24)
-        });
+        // Rodapé de navegação (casinha, +, lupa, avião): fica sobre a tela inicial e o painel de identificação.
+        frame.AddView(BottomNavigation.Create(this, BottomNavigation.Destination.Home, () => SetIdentifyOpen(true)),
+            new FrameLayout.LayoutParams(-1, -2, GravityFlags.Bottom));
 
         // Painel lateral (ao tocar no avatar): tema, packs e modelo offline.
         drawerScrim = new View(this) { Visibility = ViewStates.Gone };
@@ -485,17 +470,6 @@ public sealed class MainActivity : Activity
     void Toast(string text)
     {
         Android.Widget.Toast.MakeText(this, text, ToastLength.Short)?.Show();
-    }
-
-    Button CreateNewPostButton(int sizeDp, float textSize)
-    {
-        var button = new Button(this) { Text = "+", TextSize = textSize };
-        button.SetAllCaps(false);
-        button.SetTextColor(HudGreen);
-        button.Background = Circle(HudCard, HudGreen, 2);
-        button.ContentDescription = "Nova publicação";
-        button.Click += (_, _) => StartActivity(new Intent(this, typeof(PostComposerActivity)));
-        return button;
     }
 
     // Publicações do usuário (mais recentes primeiro), seguidas dos exemplos.
@@ -646,7 +620,6 @@ public sealed class MainActivity : Activity
     void SetIdentifyOpen(bool open)
     {
         identifyOverlay!.Visibility = open ? ViewStates.Visible : ViewStates.Gone;
-        searchButton!.Visibility = open ? ViewStates.Gone : ViewStates.Visible;
     }
 
     void OpenDrawer()

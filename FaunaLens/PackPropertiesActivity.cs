@@ -30,8 +30,7 @@ public sealed class PackPropertiesActivity : Activity
         content = new LinearLayout(this) { Orientation = Orientation.Vertical };
         scroll.AddView(content);
         root.AddView(scroll, new LinearLayout.LayoutParams(-1, -1));
-        SetContentView(root);
-        HudBackground.Apply(root, this);
+        SetContentView(BottomNavigation.Wrap(this, root));
 
         var directory = Intent?.GetStringExtra(ExtraPackDirectory);
         _ = ShowAsync(directory);
