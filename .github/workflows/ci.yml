@@ -96,6 +96,11 @@ jobs:
     name: Publicar APK na aba Releases
     needs: [testes, android, builder, python]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Uma publicação por vez: pushes seguidos em branches diferentes apagavam e recriavam a
+    # mesma release "ultima-versao" ao mesmo tempo, e uma das execuções falhava com 404.
+    concurrency:
+      group: publicar-ultima-versao
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
