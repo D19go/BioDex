@@ -32,11 +32,17 @@ Hoje o escopo é o **Rio Grande do Sul** (bioma Pampa). O APK não traz espécie
 
 | Item | Situação |
 |---|---|
-| Foto pela câmera e pela galeria | 🚧 Em desenvolvimento |
-| Identificação offline (BioCLIP em ONNX) | 🚧 Em desenvolvimento |
-| Importação de catálogos `.faunapack` | 🚧 Em desenvolvimento |
-| Download do modelo em segundo plano | 🚧 Em desenvolvimento |
+| Tela inicial com feed, painel lateral e rodapé de navegação | 🧪 Em teste |
+| Tema claro e escuro (fundo no estilo HUD) | 🧪 Em teste |
+| Foto pela câmera e pela galeria | 🧪 Em teste |
+| Identificação offline (BioCLIP em ONNX) | 🧪 Em teste |
+| Publicações com até 5 fotos, com pontos da identificação | 🧪 Em teste |
+| Pontuação por identificação, colecionador, repetição e novos habitats | 🧪 Em teste |
+| Ranking local | 🧪 Em teste |
+| Importação de catálogos `.faunapack` | 🧪 Em teste |
+| Download do modelo em segundo plano | 🧪 Em teste |
 | Criar packs ao mudar de estado (localização, opcional) | 🚧 Em desenvolvimento |
+| Rede social (amigos, compartilhamento de encontros) | 📝 Planejado |
 | Identificação pela localização / bioma | 📝 Planejado |
 | Criar catálogos dentro do próprio app | 📝 Planejado |
 
@@ -103,11 +109,17 @@ Today the scope is **Rio Grande do Sul, Brazil** (Pampa biome). The APK ships no
 
 | Item | Status |
 |---|---|
-| Photo from camera or gallery | 🚧 In development |
-| Offline identification (BioCLIP via ONNX) | 🚧 In development |
-| Importing `.faunapack` catalogs | 🚧 In development |
-| Background model download | 🚧 In development |
+| Home feed, side panel and navigation footer | 🧪 Testing |
+| Light and dark theme (HUD-style background) | 🧪 Testing |
+| Photo from camera or gallery | 🧪 Testing |
+| Offline identification (BioCLIP via ONNX) | 🧪 Testing |
+| Posts with up to 5 photos and identification points | 🧪 Testing |
+| Scoring by identification, collector, repetition and new habitats | 🧪 Testing |
+| Local ranking | 🧪 Testing |
+| Importing `.faunapack` catalogs | 🧪 Testing |
+| Background model download | 🧪 Testing |
 | Create packs when the state changes (location, optional) | 🚧 In development |
+| Social network (friends, sharing encounters) | 📝 Planned |
 | Identification by location / biome | 📝 Planned |
 | Building catalogs inside the app | 📝 Planned |
 
