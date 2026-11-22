@@ -381,7 +381,12 @@ public sealed class AppPackBuilder
         Diet = species.Diet,
         Habitat = species.Habitat,
         Curiosities = species.Curiosities,
-        GbifTaxonKey = ParseTaxonKey(species.Id)
+        GbifTaxonKey = ParseTaxonKey(species.Id),
+        Group = species.Group,
+        Rarity = species.Rarity,
+        Difficulty = species.Difficulty,
+        Size = species.Size,
+        Conservation = species.Conservation
     };
 
     // IDs de espécies do GBIF têm a forma "gbif-{chave}".

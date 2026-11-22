@@ -22,9 +22,14 @@ public sealed class PostComposerActivity : Activity
     const int PhotoWidthDp = 230;
     const int PhotoHeightDp = 290;
 
+    public const string ExtraPhotoPath = "photo_path";
+    public const string ExtraPoints = "points";
+
     // Cópias temporárias das fotos escolhidas, na ordem do carrossel (a primeira é a capa).
     readonly List<string> photos = new();
 
+    TextView? pointsBanner;
+    int identificationPoints;
     EditText? captionInput;
     LinearLayout? photoRow;
     TextView? counter;
@@ -36,6 +41,7 @@ public sealed class PostComposerActivity : Activity
         ThemeController.Apply(this);
         base.OnCreate(savedInstanceState);
         BuildUi();
+        ApplyIncomingExtras();
         RenderPhotos();
     }
 
@@ -77,6 +83,11 @@ public sealed class PostComposerActivity : Activity
         captionInput.InputType = InputTypes.TextFlagMultiLine | InputTypes.TextFlagCapSentences;
         content.AddView(captionInput, new LinearLayout.LayoutParams(-1, -2));
 
+        pointsBanner = new TextView(this) { TextSize = 14, Visibility = ViewStates.Gone };
+        pointsBanner.SetTextColor(GreenColor);
+        pointsBanner.SetPadding(Dp(4), Dp(8), 0, 0);
+        content.AddView(pointsBanner, new LinearLayout.LayoutParams(-1, -2));
+
         // 2-3. Fotos lado a lado, em carrossel. A primeira é a capa.
         var carousel = new HorizontalScrollView(this) { HorizontalScrollBarEnabled = false };
         photoRow = new LinearLayout(this) { Orientation = Orientation.Horizontal };
@@ -116,7 +127,67 @@ public sealed class PostComposerActivity : Activity
         actions.AddView(publishButton, new LinearLayout.LayoutParams(Dp(60), Dp(60)));
 
         root.AddView(actions, new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
+        root.AddView(BuildFooter(), new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
         SetContentView(root);
+    }
+
+    // Veio da identificação? Recebe a foto usada e a pontuação para mostrar no post.
+    void ApplyIncomingExtras()
+    {
+        identificationPoints = Intent?.GetIntExtra(ExtraPoints, 0) ?? 0;
+        if (Intent?.HasExtra(ExtraPoints) == true)
+        {
+            pointsBanner!.Text = $"🏆 Pontuação da identificação: +{identificationPoints}";
+            pointsBanner.Visibility = ViewStates.Visible;
+        }
+
+        var source = Intent?.GetStringExtra(ExtraPhotoPath);
+        if (string.IsNullOrWhiteSpace(source) || !File.Exists(source) || photos.Count >= MaxPhotos)
+            return;
+
+        try
+        {
+            // Cópia própria: a foto original da identificação pode ser apagada depois.
+            var copy = Path.Combine(CacheDir!.AbsolutePath, $"pick_{Guid.NewGuid():N}.img");
+            File.Copy(source, copy, true);
+            photos.Add(copy);
+        }
+        catch
+        {
+            Toast("Não foi possível trazer a foto da identificação.");
+        }
+    }
+
+    // Rodapé de navegação: só aparece nesta tela.
+    View BuildFooter()
+    {
+        var bar = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        bar.SetGravity(GravityFlags.CenterVertical);
+        bar.SetPadding(Dp(8), Dp(6), Dp(8), Dp(6));
+        bar.Background = Rounded(CardColor, 18, GreenColor, 2);
+
+        var footerSlot = new LinearLayout.LayoutParams(0, Dp(50), 1f);
+        bar.AddView(FooterButton("🏠", "Início", () => Finish()), footerSlot);
+        bar.AddView(FooterButton("+", "Publicação atual", null, active: true), footerSlot);
+        bar.AddView(FooterButton("🔍", "Identificação", () =>
+        {
+            MainActivity.OpenIdentifyOnResume = true;
+            Finish();
+        }), footerSlot);
+        bar.AddView(FooterButton("➤", "Chats", () => Toast("Chats entram em uma versão futura.")), footerSlot);
+        return bar;
+    }
+
+    Button FooterButton(string text, string description, Action? onClick, bool active = false)
+    {
+        var button = new Button(this) { Text = text, TextSize = 18 };
+        button.SetAllCaps(false);
+        button.ContentDescription = description;
+        button.SetTextColor(active ? Color.Black : GreenColor);
+        button.Background = Rounded(active ? GreenColor : Color.Transparent, 999);
+        if (onClick is not null)
+            button.Click += (_, _) => onClick();
+        return button;
     }
 
     Button SmallButton(string text, string description)
@@ -151,6 +222,10 @@ public sealed class PostComposerActivity : Activity
         counter!.Text = $"{photos.Count}/{MaxPhotos} fotos";
         addPhotoButton!.Enabled = photos.Count < MaxPhotos;
         addPhotoButton.Alpha = photos.Count < MaxPhotos ? 1f : 0.4f;
+
+        // Sem foto não há publicação: o botão de publicar fica desabilitado.
+        publishButton!.Enabled = photos.Count > 0;
+        publishButton.Alpha = photos.Count > 0 ? 1f : 0.4f;
     }
 
     LinearLayout.LayoutParams PhotoLayout() =>
@@ -335,7 +410,8 @@ public sealed class PostComposerActivity : Activity
                 Author = ScoreStore.DisplayName,
                 Caption = captionInput!.Text?.Trim() ?? "",
                 ImagePaths = saved,
-                CreatedAtUtcTicks = DateTime.UtcNow.Ticks
+                CreatedAtUtcTicks = DateTime.UtcNow.Ticks,
+                IdentificationPoints = identificationPoints
             });
 
             Finish();

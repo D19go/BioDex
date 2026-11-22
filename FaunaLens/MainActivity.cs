@@ -25,6 +25,7 @@ public sealed class MainActivity : Activity
     const int PackRequest = 4105;
     const int NotificationPermissionRequest = 4106;
     const int ManagePacksRequest = 4107;
+    public static bool OpenIdentifyOnResume;
     static readonly TimeSpan RegionCheckInterval = TimeSpan.FromMinutes(10);
 
     ImageView? preview;
@@ -35,6 +36,9 @@ public sealed class MainActivity : Activity
     TextView? drawerStatus;
     Button? pointsChip;
     Button? searchButton;
+    Button? postFromIdentifyButton;
+    string? identifiedPhotoPath;
+    int lastAwardedPoints;
     LinearLayout? identifyOverlay;
     LinearLayout? drawerPanel;
     LinearLayout? feedLayout;
@@ -83,6 +87,13 @@ public sealed class MainActivity : Activity
         base.OnResume();
         RefreshPoints();
         RefreshFeed();
+
+        // A tela de publicação pede para abrir a identificação ao sair.
+        if (OpenIdentifyOnResume)
+        {
+            OpenIdentifyOnResume = false;
+            SetIdentifyOpen(true);
+        }
         RefreshDownloadState();
         StartDownloadPolling();
         CheckPackBuildResult();
@@ -315,6 +326,20 @@ public sealed class MainActivity : Activity
         alternatives = new TextView(this) { TextSize = 15 };
         alternatives.SetPadding(0, 12, 0, 0);
         identifyContent.AddView(alternatives);
+
+        // Aparece depois de uma identificação: leva a foto e a pontuação para a tela de publicação.
+        postFromIdentifyButton = new Button(this) { Text = "📝 Postar esta foto" };
+        postFromIdentifyButton.SetAllCaps(false);
+        postFromIdentifyButton.Visibility = ViewStates.Gone;
+        postFromIdentifyButton.Click += (_, _) =>
+        {
+            var intent = new Intent(this, typeof(PostComposerActivity));
+            if (!string.IsNullOrWhiteSpace(identifiedPhotoPath))
+                intent.PutExtra(PostComposerActivity.ExtraPhotoPath, identifiedPhotoPath);
+            intent.PutExtra(PostComposerActivity.ExtraPoints, lastAwardedPoints);
+            StartActivity(intent);
+        };
+        identifyContent.AddView(postFromIdentifyButton, new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
         frame.AddView(identifyOverlay, new FrameLayout.LayoutParams(-1, -1));
 
         // Botões flutuantes: publicação + (acima) e lupa (abaixo), no mesmo padrão visual.
@@ -334,14 +359,6 @@ public sealed class MainActivity : Activity
         frame.AddView(searchButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.End | GravityFlags.Bottom)
         {
             RightMargin = Dp(20),
-            BottomMargin = Dp(24)
-        });
-
-        // Botão + no canto inferior esquerdo: cria uma publicação.
-        var newPostButton = CreateNewPostButton(60, 26);
-        frame.AddView(newPostButton, new FrameLayout.LayoutParams(Dp(60), Dp(60), GravityFlags.Start | GravityFlags.Bottom)
-        {
-            LeftMargin = Dp(20),
             BottomMargin = Dp(24)
         });
 
@@ -525,28 +542,40 @@ public sealed class MainActivity : Activity
             card.AddView(caption);
         }
 
-        var image = new ImageView(this);
-        image.SetScaleType(ImageView.ScaleType.CenterCrop);
-        try
+        foreach (var path in post.ImagePaths)
         {
-            if (post.ImagePaths.Count > 0)
-                image.SetImageBitmap(ImageLoader.Load(post.ImagePaths[0], 800));
+            var image = new ImageView(this);
+            image.SetAdjustViewBounds(true);
+            image.SetScaleType(ImageView.ScaleType.FitCenter);
+            try
+            {
+                image.SetImageBitmap(ImageLoader.Load(path, 1080));
+            }
+            catch
+            {
+                image.SetBackgroundColor(Color.Rgb(80, 80, 80));
+            }
+            image.Click += (_, _) => OpenPost(post.ImagePaths);
+            card.AddView(image, new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
         }
-        catch
-        {
-            image.SetBackgroundColor(Color.Rgb(80, 80, 80));
-        }
-        card.AddView(image, new LinearLayout.LayoutParams(-1, Dp(240)) { TopMargin = Dp(12) });
 
-        if (post.ImagePaths.Count > 1)
+        if (post.IdentificationPoints > 0)
         {
-            var more = new TextView(this) { Text = $"+{post.ImagePaths.Count - 1} foto(s)", TextSize = 13 };
-            more.SetTextColor(HudMuted);
-            more.SetPadding(0, Dp(6), 0, 0);
-            card.AddView(more);
+            var points = new TextView(this) { Text = $"🏆 +{post.IdentificationPoints} pontos da identificação", TextSize = 13 };
+            points.SetTextColor(HudGreen);
+            points.SetPadding(0, Dp(8), 0, 0);
+            card.AddView(points);
         }
 
         return card;
+    }
+
+    // Abre a publicação em tela cheia, com as fotos lado a lado.
+    void OpenPost(IReadOnlyList<string> paths)
+    {
+        var intent = new Intent(this, typeof(PostViewerActivity));
+        intent.PutStringArrayListExtra(PostViewerActivity.ExtraPaths, paths.ToList());
+        StartActivity(intent);
     }
 
     // Publicações de exemplo, só para visualizar o feed. Nomes e imagens são fictícios.
@@ -1155,21 +1184,36 @@ public sealed class MainActivity : Activity
     }
 
     // Só identificações confiantes geram pontos (ou registro). Texto curto, adicionado ao resultado.
-    static string ScoreNote(IReadOnlyList<SpeciesMatch> matches)
+    string ScoreNote(IReadOnlyList<SpeciesMatch> matches)
     {
         if (matches.Count == 0 || matches[0].Score < ResultFormatter.MinConfidentScore)
             return "";
 
         var outcome = new ScoreStore().Record(matches[0].Species);
-        string message = outcome switch
-        {
-            { Risk: SpeciesRisk.Dangerous } => "Registrado. Faixa 1 (perigosa): não pontua, só fica no registro.",
-            { Risk: SpeciesRisk.Threatened } => "Registrado. Espécie ameaçada: não pontua.",
-            { PreviousRecords: > 0 } => $"+{outcome.Awarded} pontos (registro nº {outcome.PreviousRecords + 1} desta espécie). Total: {outcome.Total}.",
-            _ => $"+{outcome.Awarded} pontos (primeiro registro, valor provisório). Total: {outcome.Total}."
-        };
+        lastAwardedPoints = outcome.Earned;
 
-        return "\n\nPONTUAÇÃO\n" + message;
+        var lines = new List<string>();
+        if (outcome.Risk == SpeciesRisk.Threatened)
+        {
+            lines.Add("Espécie ameaçada: registrada, sem pontos.");
+        }
+        else
+        {
+            var repeat = outcome.PreviousRecords > 0 ? $" (registro nº {outcome.PreviousRecords + 1})" : "";
+            lines.Add($"Pontuação individual: {outcome.Awarded}{repeat}");
+            if (outcome.FirstDiscovery > 0)
+                lines.Add($"+{outcome.FirstDiscovery} primeira descoberta");
+            if (outcome.Collector > 0)
+                lines.Add($"+{outcome.Collector} colecionador ({outcome.Group})");
+            if (outcome.Explorer > 0)
+                lines.Add($"+{outcome.Explorer} explorador ({string.Join(", ", outcome.NewHabitats ?? new List<string>())})");
+        }
+
+        if (outcome.Risk == SpeciesRisk.Dangerous)
+            lines.Add("Aviso: espécie perigosa. Não se aproxime.");
+
+        lines.Add($"Ganhou {outcome.Earned} pontos. Total: {outcome.Total}.");
+        return "\n\nPONTUAÇÃO\n" + string.Join("\n", lines);
     }
 
     async Task IdentifyAsync()
@@ -1187,6 +1231,8 @@ public sealed class MainActivity : Activity
         }
 
         identifyButton!.Enabled = false;
+        postFromIdentifyButton!.Visibility = ViewStates.Gone;
+        lastAwardedPoints = 0;
         status!.Text = "Analisando foto com BioCLIP offline...";
 
         try
@@ -1201,6 +1247,8 @@ public sealed class MainActivity : Activity
             var matches = catalog.Search(embedding, 5);
             result!.Text = ResultFormatter.Format(matches, includeAlternatives: false) + ScoreNote(matches);
             ShowMatchImages(matches);
+            identifiedPhotoPath = imagePath;
+            postFromIdentifyButton.Visibility = ViewStates.Visible;
             status!.Text = "Resultado offline concluído.";
 
             if (!string.IsNullOrWhiteSpace(endpoint))

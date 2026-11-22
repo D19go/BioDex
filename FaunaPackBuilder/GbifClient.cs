@@ -148,6 +148,8 @@ public sealed class GbifClient : IDisposable
 
         log?.Invoke($"GBIF encontrou {selected.Count} espécies candidatas na área consultada.");
 
+        var rarityByKey = RarityByKey(selected);
+
         var output = new List<SpeciesInput>();
         foreach (var item in selected)
         {
@@ -180,7 +182,9 @@ public sealed class GbifClient : IDisposable
                 Id = $"gbif-{key}",
                 GbifTaxonKey = key,
                 ScientificName = scientific.Trim(),
-                CommonName = string.IsNullOrWhiteSpace(common) ? scientific.Trim() : common.Trim()
+                CommonName = string.IsNullOrWhiteSpace(common) ? scientific.Trim() : common.Trim(),
+                Group = GroupFor(taxon.Phylum, taxon.Class),
+                Rarity = rarityByKey.GetValueOrDefault(key, 10)
             });
 
             log?.Invoke($"  catálogo: {output.Count}/{maximumSpecies} — {output[^1].CommonName} ({scientific}) — {item.Value} ocorrências");
@@ -189,6 +193,37 @@ public sealed class GbifClient : IDisposable
         }
 
         return output;
+    }
+
+    // Grupo do catálogo, pelo filo e pela classe do GBIF. Vazio quando não há como classificar.
+    public static string GroupFor(string? phylum, string? className)
+    {
+        if (string.IsNullOrWhiteSpace(phylum))
+            return "";
+
+        if (!string.Equals(phylum, "Chordata", StringComparison.OrdinalIgnoreCase))
+            return "Invertebrados";
+
+        return (className ?? "").ToLowerInvariant() switch
+        {
+            "mammalia" => "Mamíferos",
+            "aves" => "Aves",
+            "reptilia" => "Répteis",
+            "amphibia" => "Anfíbios",
+            "actinopterygii" or "chondrichthyes" or "sarcopterygii" or "cephalaspidomorphi" or "myxini" => "Peixes",
+            _ => ""
+        };
+    }
+
+    // Raridade de 5 a 20: quanto menos ocorrências na área consultada, maior a nota.
+    static Dictionary<long, int> RarityByKey(IReadOnlyList<KeyValuePair<long, int>> selected)
+    {
+        var ordered = selected.OrderBy(item => item.Value).ToList();
+        var count = ordered.Count;
+        var result = new Dictionary<long, int>();
+        for (var index = 0; index < count; index++)
+            result[ordered[index].Key] = count <= 1 ? 12 : 20 - (int)Math.Round(15.0 * index / (count - 1));
+        return result;
     }
 
     public async Task<byte[]> DownloadImageAsync(

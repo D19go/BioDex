@@ -10,6 +10,7 @@ public sealed class SavedPost
     public string Caption { get; set; } = "";
     public List<string> ImagePaths { get; set; } = new();
     public long CreatedAtUtcTicks { get; set; }
+    public int IdentificationPoints { get; set; }
 }
 
 // Publicações criadas pelo usuário. Ficam em files/posts (as fotos são copiadas para o próprio app),

@@ -20,10 +20,12 @@ public static class HudBackground
     public static void Apply(View view, Context context)
     {
         var metrics = context.Resources!.DisplayMetrics!;
-        var layers = new List<Drawable>(IsDark(context)
+        var dark = IsDark(context);
+        var layers = new List<Drawable>(dark
             ? DarkLayers(metrics.WidthPixels)
             : LightLayers(metrics.WidthPixels));
-        layers.Add(new BitmapDrawable(context.Resources, Blobs(metrics.WidthPixels, metrics.HeightPixels, metrics.Density)));
+        layers.Add(new BitmapDrawable(context.Resources,
+            Ornaments(metrics.WidthPixels, metrics.HeightPixels, metrics.Density, context.Resources!, dark)));
         view.Background = new LayerDrawable(layers.ToArray());
     }
 
@@ -47,7 +49,7 @@ public static class HudBackground
 
     // Manchas ovais do CSS (.drawer-panel.dark::before): elipses com gradiente radial que se desfaz a 75% do raio.
     // Posições em % da tela; tamanhos em dp. Desenhadas na metade da resolução para economizar memória.
-    static Bitmap Blobs(int width, int height, float density)
+    static Bitmap Ornaments(int width, int height, float density, Android.Content.Res.Resources resources, bool dark)
     {
         const float scale = 0.5f;
         var bitmap = Bitmap.CreateBitmap((int)(width * scale), (int)(height * scale), Bitmap.Config.Argb8888!)!;
@@ -59,6 +61,10 @@ public static class HudBackground
         Blob(canvas, 0.07f, 0.72f, 45, 100, 30, 115, 35, 0.20f, width, height, density);
         Blob(canvas, 0.94f, 0.90f, 75, 140, 20, 105, 30, 0.23f, width, height, density);
         Blob(canvas, 0.50f, 0.50f, 100, 55, 15, 75, 20, 0.10f, width, height, density);
+
+        using var leaf = BitmapFactory.DecodeResource(resources, Resource.Drawable.leaf_bg);
+        if (leaf is not null)
+            DrawLeaves(canvas, leaf, width, height, density, dark);
         return bitmap;
     }
 
@@ -80,6 +86,34 @@ public static class HudBackground
         // Quadrado de -1 a 1 no espaço já escalado: o gradiente circular vira elipse.
         canvas.DrawRect(-1f, -1f, 1f, 1f, paint);
         canvas.Restore();
+    }
+
+    // Folhas pequenas (menores que os botões) espalhadas pela tela toda, em posições e ângulos fixos.
+    static void DrawLeaves(Canvas canvas, Bitmap leaf, int width, int height, float density, bool dark)
+    {
+        var random = new Random(7);
+        var cell = 110f * density;
+        var leafWidth = 34f * density;
+        var paint = new Paint { AntiAlias = true };
+        paint.Alpha = dark ? 150 : 170;
+
+        for (var y = 0f; y < height + cell; y += cell)
+        {
+            for (var x = 0f; x < width + cell; x += cell)
+            {
+                var px = x + (float)random.NextDouble() * cell;
+                var py = y + (float)random.NextDouble() * cell;
+                var angle = (float)random.NextDouble() * 360f;
+                var scale = leafWidth / leaf.Width * (0.8f + (float)random.NextDouble() * 0.4f);
+
+                canvas.Save();
+                canvas.Translate(px, py);
+                canvas.Rotate(angle);
+                canvas.Scale(scale, scale);
+                canvas.DrawBitmap(leaf, -leaf.Width / 2f, -leaf.Height / 2f, paint);
+                canvas.Restore();
+            }
+        }
     }
 
     static GradientDrawable Base(int top, int middle, int bottom) =>

@@ -79,10 +79,9 @@ public sealed class RankingActivity : Activity
 
         list.AddView(new TextView(this)
         {
-            Text = $"Pontuação provisória: comum {ScoringPolicy.PlaceholderNormalPoints} pts, " +
-                   $"atenção {ScoringPolicy.PlaceholderAttentionPoints} pts. " +
-                   "Faixa 1 e ameaçadas: só registro, 0 pts. Repetições valem " +
-                   $"{ScoringPolicy.RepeatStepPoints} pts a menos por vez, mínimo {ScoringPolicy.MinimumPoints} pts.",
+            Text = "Pontuação: 22 a 65 pts por espécie, conforme raridade, dificuldade, porte e conservação. " +
+                   "Bônus: primeira descoberta +10, colecionador +15 (segunda espécie do grupo) e explorador +5. " +
+                   "Ameaçadas: só registro, 0 pts. Repetições descontam 5 pts por vez, até 80% da pontuação individual.",
             TextSize = 12
         });
 

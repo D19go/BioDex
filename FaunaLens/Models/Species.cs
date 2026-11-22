@@ -15,6 +15,13 @@ public sealed class Species
     public string Diet { get; set; } = "";
     public string Habitat { get; set; } = "";
     public string Curiosities { get; set; } = "";
+
+    // Dados do documento de pontuação. Zero = ainda não curado (o app usa o padrão de ScoringRules).
+    public string Group { get; set; } = "";
+    public int Rarity { get; set; }
+    public int Difficulty { get; set; }
+    public int Size { get; set; }
+    public int Conservation { get; set; }
     public float[] Embedding { get; set; } = Array.Empty<float>();
 
     // Caminhos completos das imagens de referência no pack instalado. Só existe em memória.
