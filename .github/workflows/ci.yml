@@ -78,6 +78,12 @@ jobs:
           else
             echo "::warning::libonnxruntime.so NÃO está no APK $NAME; a identificação offline vai falhar no celular."
           fi
+      - name: Diagnóstico: assinaturas geradas do ONNX Runtime
+        if: always()
+        run: |
+          find FaunaLens.OnnxAndroid/obj -path "*generated*" -name "*.cs" \
+            | grep -E "/AI\.Onnxruntime\.(OrtEnvironment|OrtSession|OnnxTensor|OnnxTensorLike|OnnxValue)" \
+            | while read f; do echo "== $(basename "$f")"; grep -E "public |internal " "$f" | grep -v "^\s*//" | head -80; done
       - uses: actions/upload-artifact@v4
         with:
           name: biodex-apk-${{ matrix.clone }}
