@@ -16,7 +16,7 @@ public static class DownloadErrorReport
     {
         try
         {
-            var text = Build(title, ex, trace);
+            var text = Compose(title, ex, trace);
             var path = Save(text);
             ex.Data[DataKey] = path;
             return path;
@@ -27,7 +27,7 @@ public static class DownloadErrorReport
         }
     }
 
-    static string Build(string title, Exception ex, IReadOnlyList<string> trace)
+    static string Compose(string title, Exception ex, IReadOnlyList<string> trace)
     {
         var text = new StringBuilder();
         text.AppendLine("BioDex - relatório de erro de download");
