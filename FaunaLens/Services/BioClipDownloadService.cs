@@ -40,7 +40,8 @@ public sealed class BioClipDownloadService
         string url,
         string destinationPath,
         Action<long, long>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowRestart = true)
     {
         Trace($"URL: {url}");
         Trace($"Destino: {destinationPath}");
@@ -70,7 +71,7 @@ public sealed class BioClipDownloadService
                 progress?.Invoke(new FileInfo(destinationPath).Length, new FileInfo(destinationPath).Length);
                 return;
             }
-            catch (Exception validation)
+            catch (Exception validation) when (!IsRuntimeFailure(validation))
             {
                 Trace($"Arquivo final não validou, será apagado: {validation.Message}");
                 File.Delete(destinationPath);
@@ -96,14 +97,30 @@ public sealed class BioClipDownloadService
             .Concat(response.Content.Headers)
             .Select(h => $"{h.Key}={string.Join(",", h.Value)}")));
 
-        // 416: o parcial salvo não confere com o arquivo do servidor (maior ou de outra versão).
-        // Apaga o parcial e baixa tudo de novo; sem parcial, o pedido não tem Range e não cai aqui.
+        // 416 com parcial: o servidor não tem bytes além do que já está salvo, então o parcial deve estar inteiro.
+        // Valida o parcial antes de qualquer coisa; só se o arquivo estiver ruim, apaga e baixa de novo, uma única vez.
         if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable && existingLength > 0)
         {
             Trace($"Corpo da resposta: {await ReadBodyAsync(response)}");
-            Trace("416 com parcial: apagando o parcial e recomeçando do zero");
-            File.Delete(temporaryPath);
-            await DownloadCoreAsync(url, destinationPath, progress, cancellationToken);
+            Trace("416 com parcial: validando o parcial antes de baixar de novo");
+            try
+            {
+                ValidateModel(temporaryPath);
+            }
+            catch (Exception validation) when (!IsRuntimeFailure(validation))
+            {
+                if (!allowRestart)
+                    throw;
+
+                Trace($"Parcial não validou ({validation.Message}); apagando e baixando do zero, uma vez");
+                File.Delete(temporaryPath);
+                await DownloadCoreAsync(url, destinationPath, progress, cancellationToken, allowRestart: false);
+                return;
+            }
+
+            Trace("Parcial válido; movendo para o destino final");
+            File.Move(temporaryPath, destinationPath, true);
+            progress?.Invoke(existingLength, existingLength);
             return;
         }
 
@@ -157,6 +174,12 @@ public sealed class BioClipDownloadService
         File.Move(temporaryPath, destinationPath, true);
         progress?.Invoke(downloadedBytes, totalBytes > 0 ? totalBytes : downloadedBytes);
     }
+
+    // Falha da própria biblioteca ONNX Runtime (ex.: libonnxruntime.so ausente), e não do arquivo baixado.
+    // Nesses casos o arquivo é mantido: apagar não resolve e obrigaria a baixar tudo de novo.
+    static bool IsRuntimeFailure(Exception error) =>
+        error is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException
+        || error.InnerException is DllNotFoundException;
 
     static void ValidateModel(string path)
     {

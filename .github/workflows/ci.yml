@@ -66,6 +66,13 @@ jobs:
           fi
           echo "$APK -> $NAME"
           cp "$APK" "out/$NAME"
+          # Diagnóstico: sem a biblioteca nativa do ONNX Runtime o modelo BioCLIP não carrega no celular.
+          if unzip -l "out/$NAME" | grep -q "libonnxruntime.so"; then
+            echo "libonnxruntime.so presente no APK:"
+            unzip -l "out/$NAME" | grep "libonnxruntime.so"
+          else
+            echo "::warning::libonnxruntime.so NÃO está no APK $NAME; a identificação offline vai falhar no celular."
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: biodex-apk-${{ matrix.clone }}
