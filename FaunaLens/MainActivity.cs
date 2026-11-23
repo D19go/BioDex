@@ -67,7 +67,29 @@ public sealed class MainActivity : Activity
         base.OnCreate(savedInstanceState);
         uiHandler = new Handler(Looper.MainLooper!);
         BuildUi();
+        if (!FirstRunPermissions.IsDone(this))
+            AskFirstRunPermissions();
         _ = StartupAsync();
+    }
+
+    // Primeira abertura: pede de uma vez as permissões que faltam e, em seguida, o acesso a todos os arquivos.
+    void AskFirstRunPermissions()
+    {
+        var missing = FirstRunPermissions.MissingRuntimePermissions(this);
+        if (missing.Length > 0)
+        {
+            RequestPermissions(missing, FirstRunPermissions.RequestCode);
+            return;
+        }
+
+        AskAllFilesAccessOnFirstRun();
+    }
+
+    void AskAllFilesAccessOnFirstRun()
+    {
+        FirstRunPermissions.MarkDone(this);
+        if (!ModelStorage.HasAccess(this))
+            ModelStorage.RequestAccess(this);
     }
 
     async Task StartupAsync()
@@ -721,6 +743,12 @@ public sealed class MainActivity : Activity
     public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
     {
         base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == FirstRunPermissions.RequestCode)
+        {
+            AskAllFilesAccessOnFirstRun();
+            return;
+        }
+
         if (requestCode == PermissionRequest && grantResults.Length > 0 && grantResults[0] == Permission.Granted)
             TakePhoto();
     }
