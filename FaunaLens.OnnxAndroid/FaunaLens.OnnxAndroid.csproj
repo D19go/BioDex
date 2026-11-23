@@ -13,5 +13,6 @@
 
   <ItemGroup>
     <AndroidLibrary Include="libs\onnxruntime-android-1.22.0.aar" />
+    <TransformFile Include="Metadata.xml" />
   </ItemGroup>
 </Project>

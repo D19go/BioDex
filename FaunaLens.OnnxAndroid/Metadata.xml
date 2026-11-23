@@ -1,0 +1,9 @@
+<metadata>
+  <!--
+    A interface Java OnnxValue tem getInfo/getValue com tipos que não batem entre as classes filhas
+    (OnnxTensor, OnnxMap, OnnxSequence), e o gerador do binding não consegue compilar essa interface (CS0738).
+    O app não usa a interface: só OnnxTensor, OrtSession e OrtEnvironment. Sem ela, os resultados viram Java.Lang.Object
+    e são convertidos com cast para OnnxTensor.
+  -->
+  <remove-node path="/api/package[@name='ai.onnxruntime']/interface[@name='OnnxValue']" />
+</metadata>
