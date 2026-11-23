@@ -12,6 +12,7 @@ public sealed class BioClipOnnxEngine : IDisposable
     readonly OrtEnvironment? environment;
     readonly OrtSession? session;
     readonly string inputName = "";
+    readonly string outputName = "";
 
     public bool IsReady => session is not null;
 
@@ -20,9 +21,10 @@ public sealed class BioClipOnnxEngine : IDisposable
         if (!File.Exists(modelPath))
             return;
 
-        environment = OrtEnvironment.GetEnvironment();
+        environment = OrtEnvironment.GetEnvironment(OrtEnvironment.DefaultName);
         session = environment.CreateSession(modelPath);
-        inputName = FirstName(session.InputNames);
+        inputName = session.InputNames.First();
+        outputName = session.OutputNames.First();
     }
 
     public float[] EncodeImage(string imagePath)
@@ -37,13 +39,12 @@ public sealed class BioClipOnnxEngine : IDisposable
         var tensor = OnnxTensor.CreateTensor(environment, floats, new long[] { 1, 3, ImageSize, ImageSize });
         try
         {
-            var inputs = new Java.Util.HashMap();
-            inputs.Put(new Java.Lang.String(inputName), tensor);
+            var inputs = new Dictionary<string, OnnxTensorLike> { [inputName] = tensor };
 
             var results = session.Run(inputs);
             try
             {
-                var output = ((OnnxTensor)results.Get(0)).GetFloatBuffer();
+                var output = ((OnnxTensor)results.Get(outputName).Get()).FloatBuffer;
                 var vector = new float[output.Remaining()];
                 output.Get(vector);
                 Normalize(vector);
@@ -63,24 +64,17 @@ public sealed class BioClipOnnxEngine : IDisposable
     // Confere se o arquivo abre como modelo ONNX utilizável. Não mantém a sessão aberta.
     public static void Validate(string path)
     {
-        var environment = OrtEnvironment.GetEnvironment();
+        var environment = OrtEnvironment.GetEnvironment(OrtEnvironment.DefaultName);
         var session = environment.CreateSession(path);
         try
         {
-            if (session.InputNames.Size() == 0 || session.OutputNames.Size() == 0)
+            if (session.InputNames.Count == 0 || session.OutputNames.Count == 0)
                 throw new InvalidOperationException("O arquivo baixado não contém uma sessão ONNX utilizável.");
         }
         finally
         {
             session.Close();
         }
-    }
-
-    // Primeiro nome de entrada do modelo (a imagem).
-    static string FirstName(Java.Util.ISet names)
-    {
-        var iterator = names.Iterator();
-        return iterator.Next()?.ToString() ?? "";
     }
 
     static float[] Preprocess(Bitmap source)
