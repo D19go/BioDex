@@ -78,7 +78,7 @@ jobs:
           else
             echo "::warning::libonnxruntime.so NÃO está no APK $NAME; a identificação offline vai falhar no celular."
           fi
-      - name: Diagnóstico: assinaturas geradas do ONNX Runtime
+      - name: "Diagnóstico: assinaturas geradas do ONNX Runtime"
         if: always()
         run: |
           find FaunaLens.OnnxAndroid/obj -path "*generated*" -name "*.cs" \
