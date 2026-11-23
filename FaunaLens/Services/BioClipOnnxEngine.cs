@@ -1,4 +1,4 @@
-using Ai.Onnxruntime;
+using AI.Onnxruntime;
 using Android.Graphics;
 using Java.Nio;
 
