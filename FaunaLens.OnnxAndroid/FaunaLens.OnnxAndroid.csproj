@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Binding do ONNX Runtime oficial para Android (AAR do Maven: com.microsoft.onnxruntime:onnxruntime-android).
+    O AAR não vai para o repositório: o CI baixa para libs/ antes do build (ver .github/workflows/ci.yml).
+    Traz as bibliotecas nativas libonnxruntime.so para cada arquitetura do celular.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AndroidLibrary Include="libs\onnxruntime-android-1.22.0.aar" />
+  </ItemGroup>
+</Project>

@@ -17,8 +17,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
     <PackageReference Include="Xamarin.AndroidX.Core" Version="1.19.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ONNX Runtime oficial para Android (AAR), com binding próprio. -->
+    <ProjectReference Include="..\FaunaLens.OnnxAndroid\FaunaLens.OnnxAndroid.csproj" />
   </ItemGroup>
 
   <ItemGroup>

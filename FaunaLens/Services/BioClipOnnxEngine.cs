@@ -1,42 +1,86 @@
+using Ai.Onnxruntime;
 using Android.Graphics;
-using Microsoft.ML.OnnxRuntime;
-using Microsoft.ML.OnnxRuntime.Tensors;
+using Java.Nio;
 
 namespace FaunaLens.Services;
 
+// Modelo BioCLIP no celular, pelo ONNX Runtime oficial para Android (AAR em FaunaLens.OnnxAndroid).
 public sealed class BioClipOnnxEngine : IDisposable
 {
     const int ImageSize = 224;
 
-    readonly InferenceSession? session;
+    readonly OrtEnvironment? environment;
+    readonly OrtSession? session;
+    readonly string inputName = "";
 
     public bool IsReady => session is not null;
 
     public BioClipOnnxEngine(string modelPath)
     {
-        if (File.Exists(modelPath))
-            session = new InferenceSession(modelPath);
+        if (!File.Exists(modelPath))
+            return;
+
+        environment = OrtEnvironment.GetEnvironment();
+        session = environment.CreateSession(modelPath);
+        inputName = FirstName(session.InputNames);
     }
 
     public float[] EncodeImage(string imagePath)
     {
-        if (session is null)
+        if (session is null || environment is null)
             throw new InvalidOperationException("Modelo BioCLIP offline não encontrado.");
 
         using var source = ImageLoader.Load(imagePath, ImageSize * 4);
 
         var input = Preprocess(source);
-        var inputName = session.InputMetadata.Keys.First();
-        var tensor = new DenseTensor<float>(input, new[] { 1, 3, ImageSize, ImageSize });
-
-        using var results = session.Run(new[]
+        var floats = FloatBuffer.Wrap(input);
+        var tensor = OnnxTensor.CreateTensor(environment, floats, new long[] { 1, 3, ImageSize, ImageSize });
+        try
         {
-            NamedOnnxValue.CreateFromTensor(inputName, tensor)
-        });
+            var inputs = new Java.Util.HashMap();
+            inputs.Put(new Java.Lang.String(inputName), tensor);
 
-        var output = results.First().AsTensor<float>().ToArray();
-        Normalize(output);
-        return output;
+            var results = session.Run(inputs);
+            try
+            {
+                var output = ((OnnxTensor)results.Get(0)).GetFloatBuffer();
+                var vector = new float[output.Remaining()];
+                output.Get(vector);
+                Normalize(vector);
+                return vector;
+            }
+            finally
+            {
+                results.Close();
+            }
+        }
+        finally
+        {
+            tensor.Close();
+        }
+    }
+
+    // Confere se o arquivo abre como modelo ONNX utilizável. Não mantém a sessão aberta.
+    public static void Validate(string path)
+    {
+        var environment = OrtEnvironment.GetEnvironment();
+        var session = environment.CreateSession(path);
+        try
+        {
+            if (session.InputNames.Size() == 0 || session.OutputNames.Size() == 0)
+                throw new InvalidOperationException("O arquivo baixado não contém uma sessão ONNX utilizável.");
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    // Primeiro nome de entrada do modelo (a imagem).
+    static string FirstName(Java.Util.ISet names)
+    {
+        var iterator = names.Iterator();
+        return iterator.Next()?.ToString() ?? "";
     }
 
     static float[] Preprocess(Bitmap source)
@@ -103,5 +147,5 @@ public sealed class BioClipOnnxEngine : IDisposable
             vector[i] = (float)(vector[i] / norm);
     }
 
-    public void Dispose() => session?.Dispose();
+    public void Dispose() => session?.Close();
 }

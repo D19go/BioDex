@@ -1,4 +1,3 @@
-using Microsoft.ML.OnnxRuntime;
 using System.Net;
 using System.Net.Http.Headers;
 
@@ -179,14 +178,10 @@ public sealed class BioClipDownloadService
     // Nesses casos o arquivo é mantido: apagar não resolve e obrigaria a baixar tudo de novo.
     static bool IsRuntimeFailure(Exception error) =>
         error is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException
-        || error.InnerException is DllNotFoundException;
+            or Java.Lang.UnsatisfiedLinkError or Java.Lang.NoClassDefFoundError or Java.Lang.ExceptionInInitializerError
+        || error.InnerException is DllNotFoundException or Java.Lang.UnsatisfiedLinkError;
 
-    static void ValidateModel(string path)
-    {
-        using var session = new InferenceSession(path);
-        if (session.InputMetadata.Count == 0 || session.OutputMetadata.Count == 0)
-            throw new InvalidOperationException("O arquivo baixado não contém uma sessão ONNX utilizável.");
-    }
+    static void ValidateModel(string path) => BioClipOnnxEngine.Validate(path);
 
     void Trace(string line) => trace.Add($"{DateTime.Now:HH:mm:ss.fff}  {line}");
 

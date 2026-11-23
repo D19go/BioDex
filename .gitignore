@@ -34,3 +34,6 @@ google-services.json
 
 # Visual Studio
 .vs/
+
+# AAR do ONNX Runtime baixado pelo CI
+FaunaLens.OnnxAndroid/libs/

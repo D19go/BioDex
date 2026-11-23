@@ -899,11 +899,7 @@ public sealed class MainActivity : Activity
             input.CopyTo(output);
             output.Flush();
 
-            using (var validation = new Microsoft.ML.OnnxRuntime.InferenceSession(temporaryPath))
-            {
-                if (validation.InputMetadata.Count == 0 || validation.OutputMetadata.Count == 0)
-                    throw new InvalidOperationException("O arquivo selecionado não é um modelo ONNX utilizável.");
-            }
+            BioClipOnnxEngine.Validate(temporaryPath);
 
             File.Move(temporaryPath, FileSystem.ModelPath, true);
         }

@@ -44,6 +44,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet workload install android
+      - name: Baixar o ONNX Runtime oficial para Android (AAR)
+        run: |
+          mkdir -p FaunaLens.OnnxAndroid/libs
+          curl -fsSL -o FaunaLens.OnnxAndroid/libs/onnxruntime-android-1.22.0.aar \
+            https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.22.0/onnxruntime-android-1.22.0.aar
       - name: Compilar o APK
         run: |
           ARGS=()
