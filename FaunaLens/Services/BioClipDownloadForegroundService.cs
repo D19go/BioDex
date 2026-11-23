@@ -111,9 +111,13 @@ public sealed class BioClipDownloadForegroundService : Service
         }
         catch (Exception ex)
         {
+            // O downloader já grava o relatório da própria falha; aqui só cobre erros fora dele.
+            var report = ex.Data[DownloadErrorReport.DataKey] as string
+                ?? DownloadErrorReport.Write("Serviço de download", ex, Array.Empty<string>());
+
             var failed = BioClipDownloadState.Load();
             failed.Status = "interrupted";
-            failed.Error = ex.Message;
+            failed.Error = report is null ? ex.Message : $"{ex.Message}\nRelatório salvo em: {report}";
             failed.UpdatedUtc = DateTime.UtcNow;
             BioClipDownloadState.Save(failed);
             UpdateNotification(failed);
