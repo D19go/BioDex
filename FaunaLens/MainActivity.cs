@@ -1330,10 +1330,7 @@ public sealed class MainActivity : Activity
         if (outcome.Risk == SpeciesRisk.Dangerous)
             lines.Add("Aviso: espécie perigosa. Não se aproxime.");
         lines.Add($"Pontuação acumulada: {outcome.Total}.");
-
-        var criteria = ScoringRules.CriteriaLines().Select(line => "• " + line);
-        return "\n\n" + string.Join("\n", lines)
-            + "\n\nCRITÉRIOS DOS PONTOS\n" + string.Join("\n", criteria);
+        return "\n\n" + string.Join("\n", lines);
     }
 
     // Tabela da pontuação, no estilo de planilha: nome à esquerda, valor à direita, linhas separadas.
