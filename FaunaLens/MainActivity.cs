@@ -539,22 +539,8 @@ public sealed class MainActivity : Activity
             card.AddView(caption);
         }
 
-        foreach (var path in post.ImagePaths)
-        {
-            var image = new ImageView(this);
-            image.SetAdjustViewBounds(true);
-            image.SetScaleType(ImageView.ScaleType.FitCenter);
-            try
-            {
-                image.SetImageBitmap(ImageLoader.Load(path, 1080));
-            }
-            catch
-            {
-                image.SetBackgroundColor(Color.Rgb(80, 80, 80));
-            }
-            image.Click += (_, _) => OpenPost(post.ImagePaths);
-            card.AddView(image, new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
-        }
+        if (post.ImagePaths.Count > 0)
+            card.AddView(BuildPostMedia(post.ImagePaths), new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
 
         if (post.IdentificationPoints > 0)
         {
@@ -565,6 +551,101 @@ public sealed class MainActivity : Activity
         }
 
         return card;
+    }
+
+    // Mídia da publicação no feed, no estilo de X, Instagram e Threads.
+    // Uma foto ocupa a largura inteira, com altura máxima de 4:5 (retrato). Várias fotos formam uma grade:
+    // 2 lado a lado; 3 com uma grande à esquerda; 4 em grade 2x2. Com mais de 4, a última mostra "+N".
+    // A largura é a da área útil do card: tela menos as margens do feed (16 dp) e do card (14 dp).
+    View BuildPostMedia(IReadOnlyList<string> paths)
+    {
+        var width = Resources!.DisplayMetrics!.WidthPixels - Dp(60);
+        var gap = Dp(3);
+        var half = (width - gap) / 2;
+
+        if (paths.Count == 1)
+        {
+            var single = LoadMedia(paths[0]);
+            var height = single is null || single.Width == 0
+                ? width
+                : Math.Min((int)(width * (double)single.Height / single.Width), width * 5 / 4);
+            height = Math.Max(height, Dp(120));
+            var wrapper = new LinearLayout(this) { Orientation = Orientation.Vertical };
+            wrapper.AddView(MediaCell(single, width, height, paths, 0), new LinearLayout.LayoutParams(width, height));
+            return wrapper;
+        }
+
+        var overflow = paths.Count > 4 ? paths.Count - 4 : 0;
+        var shown = paths.Take(4).Select(LoadMedia).ToList();
+
+        if (paths.Count == 2)
+        {
+            var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+            row.AddView(MediaCell(shown[0], half, half, paths, 0), new LinearLayout.LayoutParams(half, half) { RightMargin = gap });
+            row.AddView(MediaCell(shown[1], half, half, paths, 0), new LinearLayout.LayoutParams(half, half));
+            return row;
+        }
+
+        if (paths.Count == 3)
+        {
+            var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+            row.AddView(MediaCell(shown[0], half, half * 2 + gap, paths, 0), new LinearLayout.LayoutParams(half, half * 2 + gap) { RightMargin = gap });
+            var column = new LinearLayout(this) { Orientation = Orientation.Vertical };
+            column.AddView(MediaCell(shown[1], half, half, paths, 0), new LinearLayout.LayoutParams(half, half) { BottomMargin = gap });
+            column.AddView(MediaCell(shown[2], half, half, paths, 0), new LinearLayout.LayoutParams(half, half));
+            row.AddView(column, new LinearLayout.LayoutParams(half, half * 2 + gap));
+            return row;
+        }
+
+        var grid = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        var top = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        top.AddView(MediaCell(shown[0], half, half, paths, 0), new LinearLayout.LayoutParams(half, half) { RightMargin = gap, BottomMargin = gap });
+        top.AddView(MediaCell(shown[1], half, half, paths, 0), new LinearLayout.LayoutParams(half, half) { BottomMargin = gap });
+        grid.AddView(top);
+        var bottom = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        bottom.AddView(MediaCell(shown[2], half, half, paths, 0), new LinearLayout.LayoutParams(half, half) { RightMargin = gap });
+        bottom.AddView(MediaCell(shown[3], half, half, paths, overflow), new LinearLayout.LayoutParams(half, half));
+        grid.AddView(bottom);
+        return grid;
+    }
+
+    Bitmap? LoadMedia(string path)
+    {
+        try
+        {
+            return ImageLoader.Load(path, 1080);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Uma célula da grade: a foto recortada para preencher a área; toque abre a publicação.
+    // overflow > 0 mostra "+N" sobre a foto (fotos que não cabem na grade).
+    View MediaCell(Bitmap? bitmap, int width, int height, IReadOnlyList<string> all, int overflow)
+    {
+        var frame = new FrameLayout(this);
+        frame.SetBackgroundColor(Color.Rgb(30, 30, 30));
+
+        var image = new ImageView(this);
+        image.SetScaleType(ImageView.ScaleType.CenterCrop);
+        if (bitmap is not null)
+            image.SetImageBitmap(bitmap);
+        frame.AddView(image, new FrameLayout.LayoutParams(-1, -1));
+
+        if (overflow > 0)
+        {
+            var more = new TextView(this) { Text = $"+{overflow}", TextSize = 26 };
+            more.Gravity = GravityFlags.Center;
+            more.SetTextColor(Color.White);
+            more.SetTypeface(null, TypefaceStyle.Bold);
+            more.SetBackgroundColor(Color.Argb(140, 0, 0, 0));
+            frame.AddView(more, new FrameLayout.LayoutParams(-1, -1));
+        }
+
+        frame.Click += (_, _) => OpenPost(all);
+        return frame;
     }
 
     // Abre a publicação em tela cheia, com as fotos lado a lado.
