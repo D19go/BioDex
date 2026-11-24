@@ -22,9 +22,42 @@ public sealed class BioClipOnnxEngine : IDisposable
             return;
 
         environment = OrtEnvironment.GetEnvironment(OrtEnvironment.DefaultName);
-        session = environment.CreateSession(modelPath);
+        session = CreateFastSession(environment, modelPath);
         inputName = session.InputNames.First();
         outputName = session.OutputNames.First();
+    }
+
+    // Tenta XNNPACK (kernels otimizados para CPU ARM). Se o aparelho ou a biblioteca não aceitarem,
+    // cria a sessão com as opções padrão. A chamada é por reflexão para não depender da assinatura exata do AAR.
+    static OrtSession CreateFastSession(OrtEnvironment environment, string modelPath)
+    {
+        try
+        {
+            using var options = new SessionOptions();
+            if (TryEnableXnnpack(options))
+                return environment.CreateSession(modelPath, options);
+        }
+        catch
+        {
+            // Cai no padrão abaixo.
+        }
+
+        return environment.CreateSession(modelPath);
+    }
+
+    static bool TryEnableXnnpack(SessionOptions options)
+    {
+        var method = options.GetType().GetMethod("AddXnnpack")
+            ?? options.GetType().GetMethod("addXnnpack");
+        if (method is null)
+            return false;
+
+        var parameters = method.GetParameters();
+        var arguments = parameters.Length == 0
+            ? Array.Empty<object?>()
+            : new object?[] { new Dictionary<string, string>() };
+        method.Invoke(options, arguments);
+        return true;
     }
 
     public float[] EncodeImage(string imagePath)

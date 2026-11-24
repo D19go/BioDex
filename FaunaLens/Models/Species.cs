@@ -27,6 +27,14 @@ public sealed class Species
     // Caminhos completos das imagens de referência no pack instalado. Só existe em memória.
     [JsonIgnore]
     public List<string> ImagePaths { get; set; } = new();
+
+    // Quantas referências deram origem ao Embedding (usado para a média ponderada entre packs).
+    [JsonIgnore]
+    public int ReferenceCount { get; set; }
+
+    // Embedding de cada referência, para o modo "vizinhos". Só existe em memória.
+    [JsonIgnore]
+    public float[][] ReferenceEmbeddings { get; set; } = Array.Empty<float[]>();
 }
 
 public sealed record SpeciesMatch(Species Species, float Score);

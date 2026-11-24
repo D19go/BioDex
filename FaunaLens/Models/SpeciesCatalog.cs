@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FaunaLens.Services;
 
 namespace FaunaLens.Models;
 
@@ -37,7 +38,7 @@ public sealed class SpeciesCatalog
     }
 
     // Vários packs ativos ao mesmo tempo. Uma espécie que aparece em mais de um pack vira uma entrada só:
-    // embedding médio e imagens dos dois.
+    // embedding médio ponderado pelo número de referências, e imagens dos dois.
     public void LoadPacks(IEnumerable<FaunaPackData> packs)
     {
         var list = packs.ToList();
@@ -52,10 +53,7 @@ public sealed class SpeciesCatalog
                 continue;
             }
 
-            if (existing.Embedding.Length > 0 && existing.Embedding.Length == entry.Embedding.Length)
-                existing.Embedding = existing.Embedding.Zip(entry.Embedding, (a, b) => (a + b) / 2f).ToArray();
-
-            existing.ImagePaths = existing.ImagePaths.Concat(entry.ImagePaths).Distinct().ToList();
+            MergeInto(existing, entry);
         }
 
         species.Clear();
@@ -63,28 +61,36 @@ public sealed class SpeciesCatalog
         SourceName = string.Join(", ", list.Select(pack => pack.Manifest.PackName));
     }
 
+    static void MergeInto(Species existing, Species other)
+    {
+        if (existing.Embedding.Length > 0 && existing.Embedding.Length == other.Embedding.Length)
+        {
+            existing.Embedding = MatchingPolicy.WeightedMean(
+                existing.Embedding, existing.ReferenceCount,
+                other.Embedding, other.ReferenceCount);
+        }
+
+        existing.ReferenceEmbeddings = existing.ReferenceEmbeddings.Concat(other.ReferenceEmbeddings).ToArray();
+        existing.ReferenceCount += other.ReferenceCount;
+        existing.ImagePaths = existing.ImagePaths.Concat(other.ImagePaths).Distinct().ToList();
+    }
+
+    // Quando true, a espécie é comparada pelas referências mais parecidas (média dos k melhores),
+    // e não só pelo embedding médio. Fica desligado até a medição com o conjunto de teste confirmar a melhora.
+    public bool UseNearestReferences { get; set; }
+
     public IReadOnlyList<SpeciesMatch> Search(float[] query, int count)
     {
         return species
             .Where(x => x.Embedding.Length == query.Length && x.Embedding.Length > 0)
-            .Select(x => new SpeciesMatch(x, Cosine(query, x.Embedding)))
+            .Select(x => new SpeciesMatch(x, ScoreOf(query, x)))
             .OrderByDescending(x => x.Score)
             .Take(count)
             .ToList();
     }
 
-    static float Cosine(float[] a, float[] b)
-    {
-        double dot = 0, aa = 0, bb = 0;
-        for (var i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            aa += a[i] * a[i];
-            bb += b[i] * b[i];
-        }
-
-        return aa == 0 || bb == 0
-            ? 0
-            : (float)(dot / (Math.Sqrt(aa) * Math.Sqrt(bb)));
-    }
+    float ScoreOf(float[] query, Species candidate) =>
+        UseNearestReferences && candidate.ReferenceEmbeddings.Length > 0
+            ? MatchingPolicy.TopKMean(query, candidate.ReferenceEmbeddings, MatchingPolicy.NearestK)
+            : MatchingPolicy.Cosine(query, candidate.Embedding);
 }

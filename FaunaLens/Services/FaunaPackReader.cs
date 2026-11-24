@@ -85,6 +85,8 @@ public sealed class FaunaPackReader
         for (var i = 0; i < entries.Count; i++)
         {
             entries[i].Species.Embedding = Mean(vectors[i]);
+            entries[i].Species.ReferenceCount = vectors[i].Count;
+            entries[i].Species.ReferenceEmbeddings = vectors[i].ToArray();
             entries[i].Species.ImagePaths = entries[i].References
                 .Select(reference => Path.Combine(packDirectory, reference.File))
                 .Where(File.Exists)
