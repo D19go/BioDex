@@ -415,9 +415,12 @@ public sealed class MainActivity : Activity
         scoreTable = new LinearLayout(this) { Orientation = Orientation.Vertical };
         identifyContent.AddView(scoreTable);
 
+        // Rolagem lateral, como nas fotos da publicação.
         matchImages = new LinearLayout(this) { Orientation = Orientation.Horizontal };
-        matchImages.SetPadding(0, 12, 0, 0);
-        identifyContent.AddView(matchImages);
+        var matchScroll = new HorizontalScrollView(this) { HorizontalScrollBarEnabled = false };
+        matchScroll.SetPadding(0, 12, 0, 0);
+        matchScroll.AddView(matchImages, new FrameLayout.LayoutParams(-2, -2));
+        identifyContent.AddView(matchScroll);
 
         alternatives = new TextView(this) { TextSize = 15 };
         alternatives.SetPadding(0, 12, 0, 0);
@@ -1357,7 +1360,8 @@ public sealed class MainActivity : Activity
         if (matches.Count == 0 || matches[0].Score < ResultFormatter.MinConfidentScore)
             return;
 
-        foreach (var path in matches[0].Species.ImagePaths.Take(Species.ShownReferenceImages))
+        // Todas as referências já baixadas, em rolagem lateral.
+        foreach (var path in matches[0].Species.ImagePaths.Where(File.Exists))
         {
             try
             {
@@ -1369,7 +1373,7 @@ public sealed class MainActivity : Activity
                 view.SetImageBitmap(bitmap);
                 view.Click += (_, _) => StartActivity(ImageViewerActivity.CreateIntent(this, path));
 
-                var layout = new LinearLayout.LayoutParams(0, Dp(160), 1f) { RightMargin = Dp(8) };
+                var layout = new LinearLayout.LayoutParams(Dp(150), Dp(160)) { RightMargin = Dp(8) };
                 matchImages.AddView(view, layout);
             }
             catch

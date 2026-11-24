@@ -102,23 +102,25 @@ public sealed class PackPropertiesActivity : Activity
         }
     }
 
-    // Referências visuais da espécie, para comparar com a foto. Carregam em segundo plano.
-    LinearLayout BuildReferenceRow(IReadOnlyList<string> paths)
+    // Referências visuais da espécie, em rolagem lateral. Mostra só as imagens já baixadas; carregam em segundo plano.
+    View BuildReferenceRow(IReadOnlyList<string> paths)
     {
         var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
-        row.SetPadding(0, 0, 0, 16);
 
-        foreach (var path in paths.Take(Models.Species.ShownReferenceImages))
+        foreach (var path in paths.Where(System.IO.File.Exists))
         {
             var view = new ImageView(this);
             view.SetBackgroundColor(Android.Graphics.Color.Rgb(238, 238, 238));
             view.SetScaleType(ImageView.ScaleType.CenterCrop);
             view.Click += (_, _) => StartActivity(ImageViewerActivity.CreateIntent(this, path));
-            row.AddView(view, new LinearLayout.LayoutParams(0, Dp(120), 1f) { RightMargin = Dp(8) });
+            row.AddView(view, new LinearLayout.LayoutParams(Dp(120), Dp(120)) { RightMargin = Dp(8) });
             _ = LoadThumbnailAsync(path, view);
         }
 
-        return row;
+        var scroll = new HorizontalScrollView(this) { HorizontalScrollBarEnabled = false };
+        scroll.SetPadding(0, 0, 0, 16);
+        scroll.AddView(row, new FrameLayout.LayoutParams(-2, -2));
+        return scroll;
     }
 
     async Task LoadThumbnailAsync(string path, ImageView view)
