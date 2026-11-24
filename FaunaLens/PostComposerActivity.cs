@@ -275,11 +275,7 @@ public sealed class PostComposerActivity : Activity
             return;
         }
 
-        var intent = new Intent(Intent.ActionOpenDocument);
-        intent.AddCategory(Intent.CategoryOpenable);
-        intent.SetType("image/*");
-        intent.PutExtra("android.intent.extra.ALLOW_MULTIPLE", true);
-        StartActivityForResult(intent, PickRequest);
+        StartActivityForResult(ImagePicker.Create(multiple: true, max: MaxPhotos), PickRequest);
     }
 
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)

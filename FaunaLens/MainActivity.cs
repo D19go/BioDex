@@ -49,6 +49,12 @@ public sealed class MainActivity : Activity
     Uri? pendingUri;
     string? pendingPath;
 
+    // Fotos processadas na identificação. A partir da 6ª, as anteriores saem da memória.
+    const int ReleaseEarlierPhotosAt = 6;
+    const string PendingPathKey = "pending_camera_path";
+    int processedPhotoCount;
+    readonly List<Bitmap> matchBitmaps = new();
+
     readonly SpeciesCatalog catalog = new();
     readonly FaunaPackManager packManager = new();
     BioClipOnnxEngine? engine;
@@ -66,6 +72,8 @@ public sealed class MainActivity : Activity
         CrashLog.Install();
         ThemeController.Apply(this);
         base.OnCreate(savedInstanceState);
+        // A câmera pode fechar o app para liberar memória; sem isso, a foto tirada não teria caminho ao voltar.
+        pendingPath = savedInstanceState?.GetString(PendingPathKey) ?? pendingPath;
         uiHandler = new Handler(Looper.MainLooper!);
         BuildUi();
         if (!FirstRunPermissions.IsDone(this))
@@ -539,9 +547,7 @@ public sealed class MainActivity : Activity
             card.AddView(caption);
         }
 
-        if (post.ImagePaths.Count > 0)
-            card.AddView(BuildPostMedia(post.ImagePaths), new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
-
+        // Ordem: legenda, pontos da identificação, fotos.
         if (post.IdentificationPoints > 0)
         {
             var points = new TextView(this) { Text = $"🏆 +{post.IdentificationPoints} pontos da identificação", TextSize = 13 };
@@ -549,6 +555,9 @@ public sealed class MainActivity : Activity
             points.SetPadding(0, Dp(8), 0, 0);
             card.AddView(points);
         }
+
+        if (post.ImagePaths.Count > 0)
+            card.AddView(BuildPostMedia(post.ImagePaths), new LinearLayout.LayoutParams(-1, -2) { TopMargin = Dp(12) });
 
         return card;
     }
@@ -1119,12 +1128,16 @@ public sealed class MainActivity : Activity
         Recreate();
     }
 
+    protected override void OnSaveInstanceState(Bundle outState)
+    {
+        base.OnSaveInstanceState(outState);
+        if (!string.IsNullOrWhiteSpace(pendingPath))
+            outState.PutString(PendingPathKey, pendingPath);
+    }
+
     void PickImage()
     {
-        var intent = new Intent(Intent.ActionOpenDocument);
-        intent.AddCategory(Intent.CategoryOpenable);
-        intent.SetType("image/*");
-        StartActivityForResult(intent, GalleryRequest);
+        StartActivityForResult(ImagePicker.Create(multiple: false, max: 1), GalleryRequest);
     }
 
     void LoadImageFromFile(string path, string sourceText)
@@ -1135,6 +1148,10 @@ public sealed class MainActivity : Activity
         previewBitmap?.Dispose();
         previewBitmap = displayBitmap;
         pendingPath = path;
+
+        processedPhotoCount++;
+        if (processedPhotoCount >= ReleaseEarlierPhotosAt)
+            ReleaseEarlierMatchBitmaps();
         identifyButton!.Enabled = true;
         status!.Text = engine?.IsReady == true
             ? $"{sourceText} pronta para identificação offline.\nCatálogo: {catalog.SourceName}."
@@ -1167,7 +1184,8 @@ public sealed class MainActivity : Activity
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
         base.OnActivityResult(requestCode, resultCode, data);
-        if (resultCode != Result.Ok)
+        // Alguns apps de câmera devolvem "cancelado" mesmo com a foto salva; por isso a câmera é verificada pelo arquivo.
+        if (resultCode != Result.Ok && requestCode != CameraRequest)
             return;
 
         // A tela de gerenciamento devolve OK só quando o usuário pede para atualizar um pack.
@@ -1216,6 +1234,12 @@ public sealed class MainActivity : Activity
         if (requestCode != CameraRequest || string.IsNullOrWhiteSpace(pendingPath))
             return;
 
+        if (!File.Exists(pendingPath) || new FileInfo(pendingPath).Length == 0)
+        {
+            result!.Text = "A câmera não salvou a foto. Tente de novo.";
+            return;
+        }
+
         try
         {
             LoadImageFromFile(pendingPath, "Foto capturada");
@@ -1240,6 +1264,18 @@ public sealed class MainActivity : Activity
         }
     }
 
+    // Libera as fotos de referência de identificações anteriores. Remove as views antes, para nunca desenhar bitmap reciclado.
+    void ReleaseEarlierMatchBitmaps()
+    {
+        matchImages?.RemoveAllViews();
+        foreach (var bitmap in matchBitmaps)
+        {
+            bitmap.Recycle();
+            bitmap.Dispose();
+        }
+        matchBitmaps.Clear();
+    }
+
     // Mostra as imagens de referência do animal mais provável, só quando a identificação é confiante.
     // Outras possibilidades ficam logo abaixo das fotos. Toque numa foto para abri-la em tamanho maior.
     void ShowMatchImages(IReadOnlyList<SpeciesMatch> matches)
@@ -1256,7 +1292,9 @@ public sealed class MainActivity : Activity
                 var view = new ImageView(this);
                 view.SetBackgroundColor(Color.Rgb(238, 238, 238));
                 view.SetScaleType(ImageView.ScaleType.CenterCrop);
-                view.SetImageBitmap(ImageLoader.Load(path, 320));
+                var bitmap = ImageLoader.Load(path, 320);
+                matchBitmaps.Add(bitmap);
+                view.SetImageBitmap(bitmap);
                 view.Click += (_, _) => StartActivity(ImageViewerActivity.CreateIntent(this, path));
 
                 var layout = new LinearLayout.LayoutParams(0, Dp(160), 1f) { RightMargin = Dp(8) };
