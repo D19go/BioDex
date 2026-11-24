@@ -76,4 +76,16 @@ public sealed class ScoringRulesTests
         Assert.Contains("Subterrâneo", ScoringRules.HabitatsFrom("Vive em cavernas"));
         Assert.Empty(ScoringRules.HabitatsFrom("Texto sem habitat"));
     }
+
+    [Fact]
+    public void CriteriaShowTheCurrentBonusValues()
+    {
+        var text = string.Join("\n", ScoringRules.CriteriaLines());
+
+        Assert.Contains($"+{ScoringRules.FirstDiscoveryBonus} na primeira", text);
+        Assert.Contains($"+{ScoringRules.CollectorBonus} ao registrar", text);
+        Assert.Contains($"+{ScoringRules.ExplorerBonus} por habitat", text);
+        Assert.Contains($"{ScoringRules.RepeatFloorPercent}%", text);
+        Assert.Contains($"entre {ScoringRules.MinIndividual} e {ScoringRules.MaxIndividual}", text);
+    }
 }

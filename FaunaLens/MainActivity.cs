@@ -1299,7 +1299,10 @@ public sealed class MainActivity : Activity
             lines.Add("Aviso: espécie perigosa. Não se aproxime.");
 
         lines.Add($"Ganhou {outcome.Earned} pontos. Total: {outcome.Total}.");
-        return "\n\nPONTUAÇÃO\n" + string.Join("\n", lines);
+
+        var criteria = ScoringRules.CriteriaLines().Select(line => "• " + line);
+        return "\n\nPONTUAÇÃO\n" + string.Join("\n", lines)
+            + "\n\nCRITÉRIOS DOS PONTOS\n" + string.Join("\n", criteria);
     }
 
     async Task IdentifyAsync()

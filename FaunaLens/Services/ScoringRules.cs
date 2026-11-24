@@ -24,6 +24,19 @@ public static class ScoringRules
     public const int DefaultDifficulty = 10;
     public const int DefaultSize = 3;
 
+    // Critérios mostrados no resultado da identificação. Os números vêm das constantes acima,
+    // para o texto não ficar desatualizado em relação ao cálculo.
+    public static IReadOnlyList<string> CriteriaLines() => new[]
+    {
+        $"Individual: {BasePoints} base + raridade (5 a 20) + dificuldade de encontrar (1 a 20) + tamanho (1 a 5) + conservação (0 a 5). Total entre {MinIndividual} e {MaxIndividual}.",
+        $"Repetição: −{RepeatStep} a cada registro anterior da mesma espécie, sem passar de {RepeatFloorPercent}% da pontuação individual.",
+        $"Primeira descoberta: +{FirstDiscoveryBonus} na primeira vez que você registra a espécie.",
+        $"Colecionador: +{CollectorBonus} ao registrar a segunda espécie distinta de um grupo (uma vez por grupo).",
+        $"Explorador: +{ExplorerBonus} por habitat novo (floresta, savana, aquático etc.).",
+        "Espécie perigosa: recebe pontos e aviso.",
+        "Espécie ameaçada: não recebe pontos."
+    };
+
     public static int Individual(int rarity, int difficulty, int size, int conservation)
     {
         var total = BasePoints
