@@ -63,6 +63,7 @@ public sealed class MainActivity : Activity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        CrashLog.Install();
         ThemeController.Apply(this);
         base.OnCreate(savedInstanceState);
         uiHandler = new Handler(Looper.MainLooper!);

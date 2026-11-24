@@ -18,9 +18,6 @@ public sealed class AppPackBuilder
     const int MinImageBytes = 5_000;
     const int EmbeddingDimension = 512;
 
-    // Salva o pack a cada N espécies processadas, para o progresso sobreviver a uma queda do app.
-    const int CheckpointEverySpecies = 5;
-
     readonly BioClipOnnxEngine engine;
     readonly Action<string> log;
     readonly Action<int> progress;
@@ -96,6 +93,29 @@ public sealed class AppPackBuilder
             log($"Progresso salvo no pack: {snapshot.Count} espécies, {snapshot.Sum(x => x.References.Count)} imagens.");
         }
 
+        // Salva por tempo, e não por número de espécies: com 50 imagens por espécie, 5 espécies levam
+        // dezenas de minutos e o sistema pode encerrar o app antes de qualquer salvamento.
+        // Uma falha aqui é registrada e não interrompe a criação.
+        DateTime lastSavedUtc = DateTime.UtcNow;
+        async Task CheckpointIfDueAsync()
+        {
+            if (!PackGrowthPolicy.ShouldCheckpoint(lastSavedUtc, DateTime.UtcNow, PackGrowthPolicy.CheckpointInterval))
+                return;
+
+            try
+            {
+                await SaveCheckpointAsync();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log($"Não foi possível salvar o progresso agora: {ex.Message}");
+            }
+            finally
+            {
+                lastSavedUtc = DateTime.UtcNow;
+            }
+        }
+
         try
         {
             if (baseline is not null)
@@ -157,7 +177,7 @@ public sealed class AppPackBuilder
                 var wanted = PackGrowthPolicy.NewImagesAllowed(entry.References.Count, options.ImagesPerSpecies);
                 var added = wanted == 0
                     ? 0
-                    : await CollectImagesAsync(gbif, entry, options, wanted, work, ct);
+                    : await CollectImagesAsync(gbif, entry, options, wanted, work, ct, CheckpointIfDueAsync);
 
                 if (known)
                 {
@@ -182,9 +202,7 @@ public sealed class AppPackBuilder
 
                 inProgress = null;
                 progress((index + 1) * 100 / queue.Count);
-
-                if ((index + 1) % CheckpointEverySpecies == 0)
-                    await SaveCheckpointAsync();
+                await CheckpointIfDueAsync();
             }
 
             if (all.Count == 0)
@@ -253,7 +271,8 @@ public sealed class AppPackBuilder
         PackBuildOptions options,
         int wanted,
         string work,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<Task> afterImage)
     {
         var species = entry.Species;
         if (string.IsNullOrWhiteSpace(species.ScientificName))
@@ -353,6 +372,9 @@ public sealed class AppPackBuilder
                     {
                         log($"  imagem ignorada: {ex.Message}");
                     }
+
+                    // Fora do try acima: uma falha no salvamento não vira "imagem ignorada".
+                    await afterImage();
                 }
             }
         }

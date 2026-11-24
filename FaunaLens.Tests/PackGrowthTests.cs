@@ -4,6 +4,27 @@ using Xunit;
 
 namespace FaunaLens.Tests;
 
+public sealed class CheckpointPolicyTests
+{
+    [Fact]
+    public void CheckpointWaitsForTheInterval()
+    {
+        var last = new DateTime(2026, 11, 23, 12, 0, 0, DateTimeKind.Utc);
+        var interval = PackGrowthPolicy.CheckpointInterval;
+
+        Assert.False(PackGrowthPolicy.ShouldCheckpoint(last, last + TimeSpan.FromMinutes(1), interval));
+        Assert.True(PackGrowthPolicy.ShouldCheckpoint(last, last + interval, interval));
+        Assert.True(PackGrowthPolicy.ShouldCheckpoint(last, last + TimeSpan.FromMinutes(10), interval));
+    }
+
+    [Fact]
+    public void CheckpointIntervalIsShortEnoughToKeepProgress()
+    {
+        Assert.True(PackGrowthPolicy.CheckpointInterval <= TimeSpan.FromMinutes(5));
+        Assert.True(PackGrowthPolicy.CheckpointInterval >= TimeSpan.FromMinutes(1));
+    }
+}
+
 public sealed class PackGrowthPolicyTests
 {
     [Fact]

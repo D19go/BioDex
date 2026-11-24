@@ -23,6 +23,7 @@ public sealed class PackBuildForegroundService : Service
     public override void OnCreate()
     {
         base.OnCreate();
+        CrashLog.Install();
         CreateNotificationChannel();
         StartForeground(NotificationId, BuildNotification("Preparando a criação do FaunaPack...", 0, true, true));
     }
@@ -51,7 +52,18 @@ public sealed class PackBuildForegroundService : Service
         var journal = new BuildJournal(this, state);
 
         // Atualiza o estado a cada 15 s mesmo sem progresso: é o sinal de que o serviço continua vivo.
-        using var heartbeat = new System.Threading.Timer(_ => journal.Save(), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+        // O timer roda fora do try principal: uma exceção aqui derrubaria o app sem registro. Por isso é protegida.
+        using var heartbeat = new System.Threading.Timer(_ =>
+        {
+            try
+            {
+                journal.Save();
+            }
+            catch (Exception ex)
+            {
+                CrashLog.Write("Heartbeat da criação do FaunaPack", ex);
+            }
+        }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
 
         try
         {

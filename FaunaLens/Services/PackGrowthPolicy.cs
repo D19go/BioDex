@@ -9,6 +9,14 @@ public static class PackGrowthPolicy
     // A cada N espécies novas, uma espécie que já está no pack recebe imagens novas.
     public const int NewAnimalsPerRepeat = 5;
 
+    // Intervalo entre salvamentos parciais da criação. Cada salvamento regrava o pack inteiro,
+    // então não pode ser curto demais; e precisa ser curto o bastante para não perder muito trabalho.
+    public static readonly TimeSpan CheckpointInterval = TimeSpan.FromMinutes(3);
+
+    // Indica se já passou tempo suficiente desde o último salvamento parcial.
+    public static bool ShouldCheckpoint(DateTime lastSavedUtc, DateTime nowUtc, TimeSpan interval) =>
+        nowUtc - lastSavedUtc >= interval;
+
     // Quantas imagens novas uma espécie ainda pode receber sem passar do limite.
     public static int NewImagesAllowed(int existingImages, int requested)
     {
