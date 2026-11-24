@@ -38,6 +38,7 @@ public sealed class MainActivity : Activity
     Button? postFromIdentifyButton;
     string? identifiedPhotoPath;
     int lastAwardedPoints;
+    LinearLayout? scoreTable;
     LinearLayout? identifyOverlay;
     LinearLayout? drawerPanel;
     LinearLayout? feedLayout;
@@ -350,6 +351,9 @@ public sealed class MainActivity : Activity
         result = new TextView(this) { TextSize = 15 };
         result.SetPadding(0, 4, 0, 0);
         identifyContent.AddView(result);
+
+        scoreTable = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        identifyContent.AddView(scoreTable);
 
         matchImages = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         matchImages.SetPadding(0, 12, 0, 0);
@@ -1157,6 +1161,7 @@ public sealed class MainActivity : Activity
             ? $"{sourceText} pronta para identificação offline.\nCatálogo: {catalog.SourceName}."
             : $"{sourceText} carregada. Baixe o BioCLIP offline para identificar.";
         result!.Text = string.Empty;
+        scoreTable?.RemoveAllViews();
     }
 
     void ImportGalleryImage(Uri uri)
@@ -1316,31 +1321,63 @@ public sealed class MainActivity : Activity
         var outcome = new ScoreStore().Record(matches[0].Species);
         lastAwardedPoints = outcome.Earned;
 
+        // A tabela de pontos vai no próprio layout (scoreTable); o texto traz só avisos e critérios.
+        BuildScoreTable(outcome);
+
         var lines = new List<string>();
         if (outcome.Risk == SpeciesRisk.Threatened)
-        {
             lines.Add("Espécie ameaçada: registrada, sem pontos.");
-        }
-        else
-        {
-            var repeat = outcome.PreviousRecords > 0 ? $" (registro nº {outcome.PreviousRecords + 1})" : "";
-            lines.Add($"Pontuação individual: {outcome.Awarded}{repeat}");
-            if (outcome.FirstDiscovery > 0)
-                lines.Add($"+{outcome.FirstDiscovery} primeira descoberta");
-            if (outcome.Collector > 0)
-                lines.Add($"+{outcome.Collector} colecionador ({outcome.Group})");
-            if (outcome.Explorer > 0)
-                lines.Add($"+{outcome.Explorer} explorador ({string.Join(", ", outcome.NewHabitats ?? new List<string>())})");
-        }
-
         if (outcome.Risk == SpeciesRisk.Dangerous)
             lines.Add("Aviso: espécie perigosa. Não se aproxime.");
-
-        lines.Add($"Ganhou {outcome.Earned} pontos. Total: {outcome.Total}.");
+        lines.Add($"Pontuação acumulada: {outcome.Total}.");
 
         var criteria = ScoringRules.CriteriaLines().Select(line => "• " + line);
-        return "\n\nPONTUAÇÃO\n" + string.Join("\n", lines)
+        return "\n\n" + string.Join("\n", lines)
             + "\n\nCRITÉRIOS DOS PONTOS\n" + string.Join("\n", criteria);
+    }
+
+    // Tabela da pontuação, no estilo de planilha: nome à esquerda, valor à direita, linhas separadas.
+    void BuildScoreTable(ScoreOutcome outcome)
+    {
+        scoreTable!.RemoveAllViews();
+        if (outcome.Risk == SpeciesRisk.Threatened)
+            return;
+
+        AddScoreRow("Pontuação", "Valor", header: true);
+        var repeat = outcome.PreviousRecords > 0 ? $" (registro nº {outcome.PreviousRecords + 1})" : "";
+        AddScoreRow($"Individual{repeat}", outcome.Awarded.ToString());
+        AddScoreRow("Primeira descoberta", BonusText(outcome.FirstDiscovery));
+        AddScoreRow("Explorador", BonusText(outcome.Explorer));
+        AddScoreRow("Colecionador", BonusText(outcome.Collector));
+        AddScoreRow("Total", outcome.Earned.ToString(), bold: true);
+    }
+
+    static string BonusText(int points) => points > 0 ? $"+{points}" : "0";
+
+    void AddScoreRow(string label, string value, bool header = false, bool bold = false)
+    {
+        var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        row.SetGravity(GravityFlags.CenterVertical);
+        row.SetPadding(0, Dp(10), 0, Dp(10));
+
+        var name = new TextView(this) { Text = label, TextSize = header ? 14 : 16 };
+        name.SetTextColor(HudText);
+        var amount = new TextView(this) { Text = value, TextSize = header ? 14 : 16 };
+        amount.SetTextColor(HudText);
+        amount.Gravity = GravityFlags.End;
+        if (header || bold)
+        {
+            name.SetTypeface(null, TypefaceStyle.Bold);
+            amount.SetTypeface(null, TypefaceStyle.Bold);
+        }
+
+        row.AddView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+        row.AddView(amount, new LinearLayout.LayoutParams(-2, -2));
+        scoreTable!.AddView(row, new LinearLayout.LayoutParams(-1, -2));
+
+        var divider = new View(this);
+        divider.SetBackgroundColor(Color.Argb(70, 128, 128, 128));
+        scoreTable.AddView(divider, new LinearLayout.LayoutParams(-1, Dp(1)));
     }
 
     async Task IdentifyAsync()
@@ -1360,6 +1397,7 @@ public sealed class MainActivity : Activity
         identifyButton!.Enabled = false;
         postFromIdentifyButton!.Visibility = ViewStates.Gone;
         lastAwardedPoints = 0;
+        scoreTable?.RemoveAllViews();
         status!.Text = "Analisando foto com BioCLIP offline...";
 
         try
