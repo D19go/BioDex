@@ -33,7 +33,7 @@ public sealed class BioClipOnnxEngine : IDisposable
     {
         try
         {
-            using var options = new SessionOptions();
+            using var options = new OrtSession.SessionOptions();
             if (TryEnableXnnpack(options))
                 return environment.CreateSession(modelPath, options);
         }
@@ -45,7 +45,7 @@ public sealed class BioClipOnnxEngine : IDisposable
         return environment.CreateSession(modelPath);
     }
 
-    static bool TryEnableXnnpack(SessionOptions options)
+    static bool TryEnableXnnpack(OrtSession.SessionOptions options)
     {
         var method = options.GetType().GetMethod("AddXnnpack")
             ?? options.GetType().GetMethod("addXnnpack");
