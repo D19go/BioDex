@@ -11,9 +11,20 @@ public static class AppSettings
     const string LastRegionKey = "region_last";
     const string PendingRegionKey = "region_pending";
     const string LastCheckKey = "region_last_check_ticks";
+    const string FirstRunStageKey = "first_run_stage";
+
+    // Etapas da configuração inicial, feita na primeira abertura: nada, esperando o acesso a arquivos, baixando a IA.
+    public const int FirstRunIdle = 0;
+    public const int FirstRunWaitingAccess = 1;
+    public const int FirstRunDownloading = 2;
 
     static ISharedPreferences? Preferences() =>
         Android.App.Application.Context.GetSharedPreferences(PreferencesName, FileCreationMode.Private);
+
+    public static int GetFirstRunStage() => Preferences()?.GetInt(FirstRunStageKey, FirstRunIdle) ?? FirstRunIdle;
+
+    public static void SetFirstRunStage(int stage) =>
+        Preferences()?.Edit()?.PutInt(FirstRunStageKey, stage)?.Apply();
 
     public static string GetThemeMode() =>
         ThemeModes.Normalize(Preferences()?.GetString(ThemeKey, null));

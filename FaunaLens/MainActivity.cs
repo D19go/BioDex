@@ -78,8 +78,28 @@ public sealed class MainActivity : Activity
         uiHandler = new Handler(Looper.MainLooper!);
         BuildUi();
         if (!FirstRunPermissions.IsDone(this))
-            AskFirstRunPermissions();
+            ShowFirstRunSetupDialog();
         _ = StartupAsync();
+    }
+
+    // Primeira abertura: pergunta se pode baixar a IA e criar o pack da região (50 espécies, 50 fotos cada).
+    // "Sim" liga a criação automática por região e segue para as permissões; a IA baixa quando houver acesso a arquivos.
+    void ShowFirstRunSetupDialog()
+    {
+        new AlertDialog.Builder(this)
+            .SetTitle("Preparar o Biodex")
+            .SetMessage("Quer baixar agora a IA offline (BioCLIP, cerca de 170 MB) e criar o FaunaPack da sua região, "
+                + "com 50 espécies e 50 fotos por espécie?\n\n"
+                + "A criação pode levar muitas horas. Use Wi-Fi e deixe o aparelho carregando.")
+            .SetPositiveButton("Sim, preparar", (_, _) =>
+            {
+                AppSettings.SetAutoRegionEnabled(true);
+                AppSettings.SetFirstRunStage(AppSettings.FirstRunWaitingAccess);
+                AskFirstRunPermissions();
+            })
+            .SetNegativeButton("Agora não", (_, _) => AskFirstRunPermissions())
+            .SetCancelable(false)
+            .Show();
     }
 
     // Primeira abertura: pede de uma vez as permissões que faltam e, em seguida, o acesso a todos os arquivos.
@@ -99,7 +119,39 @@ public sealed class MainActivity : Activity
     {
         FirstRunPermissions.MarkDone(this);
         if (!ModelStorage.HasAccess(this))
+        {
             ModelStorage.RequestAccess(this);
+            return;
+        }
+
+        ContinueFirstRunSetup();
+    }
+
+    // Com o acesso liberado, inicia o download da IA escolhido na primeira abertura.
+    void ContinueFirstRunSetup()
+    {
+        if (AppSettings.GetFirstRunStage() != AppSettings.FirstRunWaitingAccess || !ModelStorage.HasAccess(this))
+            return;
+
+        AppSettings.SetFirstRunStage(AppSettings.FirstRunDownloading);
+        _ = DownloadModelAsync();
+    }
+
+    // Quando o modelo termina de baixar, cria o pack da região detectada. Roda uma vez só.
+    async Task StartFirstRunPackAsync()
+    {
+        string? region = null;
+        if (LocationRegionDetector.HasPermission(this))
+            region = BrazilRegions.Canonical(await LocationRegionDetector.DetectStateAsync(this, CancellationToken.None));
+
+        if (region is null)
+        {
+            result!.Text = "A IA foi baixada, mas não consegui identificar sua região. Crie o FaunaPack da sua região em Gerenciar FaunaPacks.";
+            return;
+        }
+
+        AppSettings.SetRegionState(new RegionState(region));
+        StartRegionBuild(region);
     }
 
     async Task StartupAsync()
@@ -125,6 +177,7 @@ public sealed class MainActivity : Activity
             OpenIdentifyOnResume = false;
             SetIdentifyOpen(true);
         }
+        ContinueFirstRunSetup();
         RefreshDownloadState();
         StartDownloadPolling();
         CheckPackBuildResult();
@@ -230,6 +283,13 @@ public sealed class MainActivity : Activity
         }
 
         downloadModelButton!.Enabled = true;
+
+        // Download da configuração inicial concluído: o arquivo final existe, então cria o pack da região.
+        if (AppSettings.GetFirstRunStage() == AppSettings.FirstRunDownloading && File.Exists(FileSystem.ModelPath))
+        {
+            AppSettings.SetFirstRunStage(AppSettings.FirstRunIdle);
+            _ = StartFirstRunPackAsync();
+        }
 
         // O download terminou em segundo plano: carrega o modelo sem exigir reiniciar o app.
         if (engine?.IsReady != true && !engineLoading && !engineLoadFailed && File.Exists(FileSystem.ModelPath)
@@ -1114,7 +1174,14 @@ public sealed class MainActivity : Activity
         engine = null;
 
         RequestNotificationPermissionIfNeeded();
-        PackBuildLauncher.Start(this, new PackBuildOptions { PackName = $"{region} (automático)", StateProvince = region }.Normalized());
+        // Região automática: 50 espécies, 50 fotos por espécie.
+        PackBuildLauncher.Start(this, new PackBuildOptions
+        {
+            PackName = $"{region} (automático)",
+            StateProvince = region,
+            MaxSpecies = 50,
+            ImagesPerSpecies = 50
+        }.Normalized());
         result!.Text = $"Mudança de região detectada: criando um FaunaPack de {region} em segundo plano. Acompanhe pela notificação.";
     }
 
