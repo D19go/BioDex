@@ -250,13 +250,18 @@ class Store:
             ).fetchall()
             return [self._post(r, self._positions(r["id"])) for r in rows]
 
-    def public_feed(self, before: int, limit: int) -> list[dict]:
+    def public_feed(self, viewer: str, before: int, limit: int) -> list[dict]:
+        """Posts públicos de quem não é amigo nem o próprio viewer.
+        Assim cada post aparece em uma única das duas listas do feed (amigos ou público)."""
         with self.lock:
             rows = self.db.execute(
                 """SELECT p.*, u.display_name AS author_name FROM posts p JOIN users u ON u.id = p.author_id
-                   WHERE p.visibility = 'public' AND p.created_at < ?
+                   WHERE p.visibility = 'public' AND p.created_at < ? AND p.author_id != ?
+                   AND p.author_id NOT IN (
+                       SELECT CASE WHEN requester_id = ? THEN addressee_id ELSE requester_id END
+                       FROM friendships WHERE status = 'accepted' AND (requester_id = ? OR addressee_id = ?))
                    ORDER BY p.created_at DESC LIMIT ?""",
-                (before, limit),
+                (before, viewer, viewer, viewer, viewer, limit),
             ).fetchall()
             return [self._post(r, self._positions(r["id"])) for r in rows]
 

@@ -168,7 +168,7 @@ def create_app(data_dir: str) -> FastAPI:
         cursor_public = beforePublic if beforePublic is not None else start
 
         friend_posts = store.friend_feed(user["id"], cursor_friends, limit * 2)
-        public_posts = store.public_feed(cursor_public, limit)
+        public_posts = store.public_feed(user["id"], cursor_public, limit)
         page = mix(friend_posts, public_posts, limit)
 
         friend_times = [p["createdAt"] for source, p in page if source == "friend"]

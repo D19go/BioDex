@@ -149,3 +149,19 @@ def test_feed_cursors_do_not_repeat_posts(client):
     seen = [p["id"] for p in first["posts"]] + [p["id"] for p in second["posts"]]
     assert len(seen) == len(set(seen)) == 4
     assert set(seen) <= set(ids)
+
+
+def test_public_post_of_friend_appears_once(client):
+    _, ana = sign_up(client, "Ana")
+    _, bia = sign_up(client, "Bia")
+    befriend(client, bia, ana)
+    publish(client, ana, visibility="public")
+
+    posts = client.get("/v1/feed", headers=bia).json()["posts"]
+    assert len(posts) == 1
+
+
+def test_own_public_post_appears_once(client):
+    _, ana = sign_up(client, "Ana")
+    publish(client, ana, visibility="public")
+    assert len(client.get("/v1/feed", headers=ana).json()["posts"]) == 1

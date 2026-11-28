@@ -71,11 +71,17 @@ def test_friend_feed_has_friends_and_self_but_not_strangers(store):
     assert ids == {"p-a", "p-b"}
 
 
-def test_public_feed_only_public_posts(store):
-    a, b = make_user(store, "Ana"), make_user(store, "Bia")
-    store.create_post("pub", a, "", "public", 0, [1])
-    store.create_post("priv", a, "", "friends", 0, [1])
-    assert [p["id"] for p in store.public_feed(10**13, 50)] == ["pub"]
+def test_public_feed_only_public_posts_from_non_friends(store):
+    a, b, c = make_user(store, "Ana"), make_user(store, "Bia"), make_user(store, "Caio")
+    store.request_friend(a, b)
+    store.accept_friend(b, a)
+    store.create_post("pub-caio", c, "", "public", 0, [1])
+    store.create_post("priv-caio", c, "", "friends", 0, [1])
+    store.create_post("pub-bia", b, "", "public", 0, [1])   # amiga: fica só no feed de amigos
+    store.create_post("pub-ana", a, "", "public", 0, [1])   # própria: fica só no feed de amigos
+
+    assert [p["id"] for p in store.public_feed(a, 10**13, 50)] == ["pub-caio"]
+    assert {p["id"] for p in store.friend_feed(a, 10**13, 50)} == {"pub-bia", "pub-ana"}
 
 
 def test_delete_post_only_by_author(store):
