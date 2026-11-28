@@ -1,0 +1,46 @@
+Copyright (c) 2026 Diogo da Silva Costa. Todos os direitos reservados.
+Copyright (c) 2026 Diogo da Silva Costa. All rights reserved.
+
+PORTUGUÊS
+
+Este software e sua documentação são de propriedade exclusiva de Diogo da Silva Costa.
+
+É permitido:
+- ler e estudar o código-fonte publicado neste repositório;
+- compilar e executar o aplicativo para uso pessoal e não comercial, como testador.
+
+Não é permitido, sem autorização prévia e por escrito do titular:
+- copiar, reproduzir, distribuir ou publicar o código, total ou parcialmente, em outro lugar;
+- modificar, criar obras derivadas ou redistribuir versões alteradas;
+- usar o código ou o aplicativo com finalidade comercial, inclusive em serviços pagos, publicidade ou produtos de terceiros;
+- remover avisos de direitos autorais.
+
+Contribuições enviadas ao repositório passam a ser de propriedade do titular, a menos que um acordo escrito diga o contrário.
+
+Nenhuma licença de patente, marca ou outro direito é concedida além do descrito acima.
+
+O software é fornecido "como está", sem garantias de qualquer tipo. O titular não responde por danos decorrentes do uso.
+
+Este aviso não substitui um contrato redigido por advogado. Os modelos e dados de terceiros (BioCLIP, ONNX Runtime, imagens do GBIF) mantêm suas próprias licenças, descritas no README.
+
+ENGLISH
+
+This software and its documentation are the exclusive property of Diogo da Silva Costa.
+
+You may:
+- read and study the source code published in this repository;
+- build and run the application for personal, non-commercial testing use.
+
+You may not, without prior written authorization from the owner:
+- copy, reproduce, distribute or publish the code, in whole or in part, anywhere else;
+- modify, create derivative works or redistribute modified versions;
+- use the code or the application for commercial purposes, including paid services, advertising or third-party products;
+- remove copyright notices.
+
+Contributions sent to this repository become the property of the owner, unless a written agreement states otherwise.
+
+No patent, trademark or other right is granted beyond what is described above.
+
+The software is provided "as is", without warranties of any kind. The owner is not liable for damages arising from its use.
+
+This notice is not a substitute for a contract drafted by a lawyer. Third-party models and data (BioCLIP, ONNX Runtime, GBIF images) keep their own licenses, described in the README.
