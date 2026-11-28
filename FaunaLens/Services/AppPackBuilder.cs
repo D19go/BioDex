@@ -261,12 +261,12 @@ public sealed class AppPackBuilder
         return item;
     }
 
-    // Quantas imagens são baixadas ao mesmo tempo. Enquanto o celular converte e mede uma imagem,
-    // as próximas já estão chegando do GBIF. Só a rede roda em paralelo; o resto segue em ordem.
-    const int DownloadWindow = 4;
+    // Quantas imagens são baixadas e reduzidas ao mesmo tempo. Enquanto uma é medida, as próximas já chegaram
+    // do GBIF e viraram miniatura. Hash, nome do arquivo e embedding continuam em ordem: são estado da espécie.
+    const int DownloadWindow = 8;
 
     // Imagem já baixada, esperando ser processada na ordem de prioridade.
-    sealed record FetchedImage(GbifOccurrence Occurrence, GbifMedia Media, int Limit, byte[] Raw, double Seconds, Exception? Error);
+    sealed record FetchedImage(GbifOccurrence Occurrence, GbifMedia Media, int Limit, byte[] Thumbnail, int RawKilobytes, double Seconds, Exception? Error);
 
     // Acrescenta até "wanted" imagens novas à espécie. Nunca repete uma mídia do GBIF nem um arquivo
     // (mesmo conteúdo, mesmo hash) que a espécie já tenha. Devolve quantas entraram.
@@ -330,14 +330,18 @@ public sealed class AppPackBuilder
             }
         }
 
-        // Só baixa. Não toca em log, lista nem arquivo: roda em paralelo com as outras.
+        // Baixa e reduz a miniatura. Não toca em log, lista, hash nem arquivo da espécie: roda em paralelo.
         async Task<FetchedImage> FetchAsync(GbifOccurrence occurrence, GbifMedia media, int limit)
         {
             var started = DateTime.UtcNow;
             try
             {
                 var raw = await gbif.DownloadImageAsync(occurrence, media, ct);
-                return new FetchedImage(occurrence, media, limit, raw, (DateTime.UtcNow - started).TotalSeconds, null);
+                var seconds = (DateTime.UtcNow - started).TotalSeconds;
+                var thumbnail = raw.Length < MinImageBytes
+                    ? Array.Empty<byte>()
+                    : await Task.Run(() => MakeThumbnail(raw, work), ct);
+                return new FetchedImage(occurrence, media, limit, thumbnail, raw.Length / 1024, seconds, null);
             }
             catch (OperationCanceledException)
             {
@@ -345,7 +349,7 @@ public sealed class AppPackBuilder
             }
             catch (Exception ex)
             {
-                return new FetchedImage(occurrence, media, limit, Array.Empty<byte>(), 0, ex);
+                return new FetchedImage(occurrence, media, limit, Array.Empty<byte>(), 0, 0, ex);
             }
         }
 
@@ -384,14 +388,14 @@ public sealed class AppPackBuilder
                 continue;
             }
 
-            log($"  GBIF {key}: {fetched.Raw.Length / 1024} KB em {fetched.Seconds:0.0} s");
+            log($"  GBIF {key}: {fetched.RawKilobytes} KB em {fetched.Seconds:0.0} s");
             try
             {
                 if (fetched.Error is not null)
                 {
                     log($"  imagem ignorada: {fetched.Error.Message}");
                 }
-                else if (await TryAcceptAsync(fetched, entry, folder, work, usedHashes, ct))
+                else if (await TryAcceptAsync(fetched, entry, folder, usedHashes, ct))
                 {
                     added++;
                     takenPerOccurrence[key] = takenPerOccurrence.GetValueOrDefault(key) + 1;
@@ -420,14 +424,10 @@ public sealed class AppPackBuilder
         FetchedImage fetched,
         PackSpecies entry,
         string folder,
-        string work,
         HashSet<string> usedHashes,
         CancellationToken ct)
     {
-        if (fetched.Raw.Length < MinImageBytes)
-            return false;
-
-        var thumbnail = await Task.Run(() => MakeThumbnail(fetched.Raw, work), ct);
+        var thumbnail = fetched.Thumbnail;
         if (thumbnail.Length < MinImageBytes)
             return false;
 
