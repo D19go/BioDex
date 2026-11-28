@@ -100,6 +100,15 @@ public static class PackBuildStateStore
         File.Move(temporary, path, true);
     }
 
+    // Lê, altera e grava o estado de uma vez (usado quando o serviço não está rodando).
+    public static void Update(string path, Action<PackBuildState> change)
+    {
+        var state = Load(path);
+        change(state);
+        state.UpdatedUtc = DateTime.UtcNow;
+        Save(path, state);
+    }
+
     // Marca o resultado como já exibido na tela principal, para não mostrar de novo.
     public static void Acknowledge(string path)
     {

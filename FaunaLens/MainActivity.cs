@@ -146,6 +146,9 @@ public sealed class MainActivity : Activity
 
     async Task StartupAsync()
     {
+        // Criação de pack que o Android encerrou: retoma do checkpoint salvo.
+        await Task.Run(() => PackBuildLauncher.ResumeIfInterrupted(this));
+
         status!.Text = "Carregando catálogo de espécies...";
         await LoadCatalogOrInstalledPackAsync();
         RecoverBackgroundDownload();

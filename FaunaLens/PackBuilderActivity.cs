@@ -123,7 +123,8 @@ public sealed class PackBuilderActivity : Activity
             "completed" => $"Pack \"{state.PackName}\" criado e ativado com {state.ResultSpeciesCount} espécies.",
             "failed" => $"A criação falhou: {state.Error}",
             "cancelled" => "A última criação foi cancelada.",
-            "queued" or "running" => "A última criação foi interrompida (o sistema encerrou o app). Crie de novo.",
+            "paused" => "A criação foi pausada pelo Android. O progresso está salvo: toque em \"Atualizar FaunaPack\" para continuar.",
+            "queued" or "running" => "A última criação foi interrompida. Ela será retomada ao abrir o app.",
             _ => ""
         };
     }
@@ -184,6 +185,11 @@ public sealed class PackBuilderActivity : Activity
         cancelButton = new Button(this) { Text = "Cancelar criação", Enabled = false };
         cancelButton.Click += (_, _) => CancelBuild();
         content.AddView(cancelButton);
+
+        // Sem essa exceção, muitos fabricantes encerram a criação quando a tela apaga.
+        var batteryButton = new Button(this) { Text = "Liberar o app da otimização de bateria" };
+        batteryButton.Click += (_, _) => StartActivity(new Intent(Android.Provider.Settings.ActionIgnoreBatteryOptimizationSettings));
+        content.AddView(batteryButton);
 
         progress = new ProgressBar(this, null, Android.Resource.Attribute.ProgressBarStyleHorizontal) { Max = 100 };
         content.AddView(progress);

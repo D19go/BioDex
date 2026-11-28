@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http;
 using System.Security.Cryptography;
 using FaunaLens.Models;
 using FaunaPackBuilder;
@@ -265,6 +267,9 @@ public sealed class AppPackBuilder
     // do GBIF e viraram miniatura. Hash, nome do arquivo e embedding continuam em ordem: são estado da espécie.
     const int DownloadWindow = 8;
 
+    // Esperas entre tentativas de baixar uma imagem que falhou por motivo passageiro.
+    static readonly TimeSpan[] DownloadRetryDelays = { TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(15) };
+
     // Se o modelo falhar nesta quantidade de fotos seguidas, a criação para: senão roda horas sem gerar nada.
     const int MaxConsecutiveEmbeddingFailures = 8;
 
@@ -339,7 +344,7 @@ public sealed class AppPackBuilder
             var started = DateTime.UtcNow;
             try
             {
-                var raw = await gbif.DownloadImageAsync(occurrence, media, ct);
+                var raw = await DownloadWithRetryAsync(gbif, occurrence, media, ct);
                 var seconds = (DateTime.UtcNow - started).TotalSeconds;
                 var thumbnail = raw.Length < MinImageBytes
                     ? Array.Empty<byte>()
@@ -431,6 +436,31 @@ public sealed class AppPackBuilder
         // Downloads que sobrarem continuam em segundo plano só na memória; não são usados.
         return added;
     }
+
+    // Tenta de novo quando a falha parece passageira. Erro definitivo (ex.: 404) não é repetido.
+    static async Task<byte[]> DownloadWithRetryAsync(GbifClient gbif, GbifOccurrence occurrence, GbifMedia media, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await gbif.DownloadImageAsync(occurrence, media, ct);
+            }
+            catch (Exception ex) when (attempt < DownloadRetryDelays.Length && IsTransient(ex))
+            {
+                await Task.Delay(DownloadRetryDelays[attempt], ct);
+            }
+        }
+    }
+
+    static bool IsTransient(Exception ex) => ex switch
+    {
+        TimeoutException => true,
+        HttpRequestException http => http.StatusCode is not HttpStatusCode status
+            || status == (HttpStatusCode)429
+            || (int)status >= 500,
+        _ => false
+    };
 
     // Miniatura, hash e embedding de uma imagem baixada. Devolve false se ela não serve (pequena ou repetida).
     async Task<bool> TryAcceptAsync(
