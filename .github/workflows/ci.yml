@@ -25,6 +25,17 @@ jobs:
           name: resultado-testes
           path: FaunaLens.Tests/TestResults/*.trx
 
+  social:
+    name: Testes do servidor social (API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r Social/requirements.txt
+      - run: python -m pytest Social/tests -q
+
   android:
     name: Build do app Android (APK)
     runs-on: ubuntu-latest
@@ -116,7 +127,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m py_compile FaunaLens/Server/main.py FaunaLens/tools/*.py
+      - run: python -m py_compile FaunaLens/Server/main.py FaunaLens/tools/*.py Social/*.py
 
   release:
     name: Publicar APK na aba Releases

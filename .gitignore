@@ -40,3 +40,8 @@ FaunaLens.OnnxAndroid/libs/
 
 # Modelo BioCLIP baixado pelo CI para embutir no APK (grande demais para o git)
 FaunaLens/Assets/bioclip_image.onnx
+
+# Python
+__pycache__/
+.pytest_cache/
+Social/data/
