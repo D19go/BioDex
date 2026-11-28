@@ -261,6 +261,13 @@ public sealed class AppPackBuilder
         return item;
     }
 
+    // Quantas imagens são baixadas ao mesmo tempo. Enquanto o celular converte e mede uma imagem,
+    // as próximas já estão chegando do GBIF. Só a rede roda em paralelo; o resto segue em ordem.
+    const int DownloadWindow = 4;
+
+    // Imagem já baixada, esperando ser processada na ordem de prioridade.
+    sealed record FetchedImage(GbifOccurrence Occurrence, GbifMedia Media, int Limit, byte[] Raw, double Seconds, Exception? Error);
+
     // Acrescenta até "wanted" imagens novas à espécie. Nunca repete uma mídia do GBIF nem um arquivo
     // (mesmo conteúdo, mesmo hash) que a espécie já tenha. Devolve quantas entraram.
     // Prioridade a espécimes novos: primeiro uma foto de cada registro GBIF que o pack ainda não tem;
@@ -305,81 +312,158 @@ public sealed class AppPackBuilder
         var folder = Path.Combine(work, "references", species.Id);
         Directory.CreateDirectory(folder);
 
-        var added = 0;
-        foreach (var (group, limit) in passes)
+        // Mídias na ordem de prioridade, já filtradas pela licença. O limite por registro é conferido ao usar.
+        IEnumerable<(GbifOccurrence Occurrence, GbifMedia Media, int Limit)> Ordered()
         {
-            foreach (var occurrence in group)
+            foreach (var (group, limit) in passes)
             {
-                foreach (var media in occurrence.Media)
+                foreach (var occurrence in group)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    if (added >= wanted)
-                        return added;
-                    if (takenPerOccurrence.GetValueOrDefault(occurrence.Key) >= limit)
-                        break;
-                    if (!GbifLicense.IsAllowed(media.License, options.AllowBySa)) continue;
-                    if (string.IsNullOrWhiteSpace(media.Identifier)) continue;
-                    if (!usedMedia.Add(media.Identifier)) continue;
-
-                    try
+                    foreach (var media in occurrence.Media)
                     {
-                        log($"  GBIF {occurrence.Key}: baixando imagem...");
-                        var started = DateTime.UtcNow;
-                        var raw = await gbif.DownloadImageAsync(occurrence, media, ct);
-                        var downloadSeconds = (DateTime.UtcNow - started).TotalSeconds;
-                        log($"  GBIF {occurrence.Key}: {raw.Length / 1024} KB em {downloadSeconds:0.0} s");
-                        if (raw.Length < MinImageBytes) continue;
-
-                        var thumbnail = await Task.Run(() => MakeThumbnail(raw, work), ct);
-                        if (thumbnail.Length < MinImageBytes) continue;
-
-                        var hash = Convert.ToHexString(SHA256.HashData(thumbnail));
-                        if (!usedHashes.Add(hash)) continue;
-
-                        var index = entry.References.Count + 1;
-                        var localPath = Path.Combine(folder, $"{index}.jpg");
-                        await File.WriteAllBytesAsync(localPath, thumbnail, ct);
-
-                        var embedStarted = DateTime.UtcNow;
-                        var vector = await Task.Run(() => engine.EncodeImage(localPath), ct);
-                        var embedMs = (DateTime.UtcNow - embedStarted).TotalMilliseconds;
-                        if (vector.Length != EmbeddingDimension)
-                            throw new InvalidOperationException($"Embedding inesperado: {vector.Length} dimensões.");
-
-                        entry.Embeddings.Add(vector);
-                        entry.References.Add(new ReferenceImageInfo
-                        {
-                            Index = index,
-                            File = $"images/{species.Id}/{index}.jpg",
-                            GbifId = occurrence.Key,
-                            SourceUrl = media.Identifier,
-                            OccurrenceUrl = $"https://www.gbif.org/occurrence/{occurrence.Key}",
-                            License = media.License,
-                            Creator = media.Creator ?? occurrence.RightsHolder,
-                            RightsHolder = media.RightsHolder ?? occurrence.RightsHolder,
-                            Dataset = occurrence.DatasetName
-                        });
-
-                        added++;
-                        takenPerOccurrence[occurrence.Key] = takenPerOccurrence.GetValueOrDefault(occurrence.Key) + 1;
-                        log($"  imagem {index} pronta ({added}/{wanted} nesta rodada; embedding {embedMs:0} ms)");
+                        if (!GbifLicense.IsAllowed(media.License, options.AllowBySa)) continue;
+                        if (string.IsNullOrWhiteSpace(media.Identifier)) continue;
+                        if (!usedMedia.Add(media.Identifier)) continue;
+                        yield return (occurrence, media, limit);
                     }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        log($"  imagem ignorada: {ex.Message}");
-                    }
-
-                    // Fora do try acima: uma falha no salvamento não vira "imagem ignorada".
-                    await afterImage();
                 }
             }
         }
 
+        // Só baixa. Não toca em log, lista nem arquivo: roda em paralelo com as outras.
+        async Task<FetchedImage> FetchAsync(GbifOccurrence occurrence, GbifMedia media, int limit)
+        {
+            var started = DateTime.UtcNow;
+            try
+            {
+                var raw = await gbif.DownloadImageAsync(occurrence, media, ct);
+                return new FetchedImage(occurrence, media, limit, raw, (DateTime.UtcNow - started).TotalSeconds, null);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return new FetchedImage(occurrence, media, limit, Array.Empty<byte>(), 0, ex);
+            }
+        }
+
+        using var sequence = Ordered().GetEnumerator();
+        var inFlight = new Queue<Task<FetchedImage>>();
+        var exhausted = false;
+
+        // Mantém até DownloadWindow downloads em andamento.
+        void Refill()
+        {
+            while (!exhausted && inFlight.Count < DownloadWindow)
+            {
+                if (!sequence.MoveNext())
+                {
+                    exhausted = true;
+                    break;
+                }
+
+                var next = sequence.Current;
+                inFlight.Enqueue(FetchAsync(next.Occurrence, next.Media, next.Limit));
+            }
+        }
+
+        var added = 0;
+        Refill();
+        while (added < wanted && inFlight.Count > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+            var fetched = await inFlight.Dequeue();
+            Refill();
+
+            var key = fetched.Occurrence.Key;
+            if (takenPerOccurrence.GetValueOrDefault(key) >= fetched.Limit)
+            {
+                await afterImage();
+                continue;
+            }
+
+            log($"  GBIF {key}: {fetched.Raw.Length / 1024} KB em {fetched.Seconds:0.0} s");
+            try
+            {
+                if (fetched.Error is not null)
+                {
+                    log($"  imagem ignorada: {fetched.Error.Message}");
+                }
+                else if (await TryAcceptAsync(fetched, entry, folder, work, usedHashes, ct))
+                {
+                    added++;
+                    takenPerOccurrence[key] = takenPerOccurrence.GetValueOrDefault(key) + 1;
+                    log($"  imagem {entry.References.Count} pronta ({added}/{wanted} nesta rodada)");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                log($"  imagem ignorada: {ex.Message}");
+            }
+
+            // Fora do try acima: uma falha no salvamento não vira "imagem ignorada".
+            await afterImage();
+        }
+
+        // Downloads que sobrarem continuam em segundo plano só na memória; não são usados.
         return added;
+    }
+
+    // Miniatura, hash e embedding de uma imagem baixada. Devolve false se ela não serve (pequena ou repetida).
+    async Task<bool> TryAcceptAsync(
+        FetchedImage fetched,
+        PackSpecies entry,
+        string folder,
+        string work,
+        HashSet<string> usedHashes,
+        CancellationToken ct)
+    {
+        if (fetched.Raw.Length < MinImageBytes)
+            return false;
+
+        var thumbnail = await Task.Run(() => MakeThumbnail(fetched.Raw, work), ct);
+        if (thumbnail.Length < MinImageBytes)
+            return false;
+
+        var hash = Convert.ToHexString(SHA256.HashData(thumbnail));
+        if (!usedHashes.Add(hash))
+            return false;
+
+        var species = entry.Species;
+        var index = entry.References.Count + 1;
+        var localPath = Path.Combine(folder, $"{index}.jpg");
+        await File.WriteAllBytesAsync(localPath, thumbnail, ct);
+
+        var embedStarted = DateTime.UtcNow;
+        var vector = await Task.Run(() => engine.EncodeImage(localPath), ct);
+        var embedMs = (DateTime.UtcNow - embedStarted).TotalMilliseconds;
+        if (vector.Length != EmbeddingDimension)
+            throw new InvalidOperationException($"Embedding inesperado: {vector.Length} dimensões.");
+
+        var occurrence = fetched.Occurrence;
+        var media = fetched.Media;
+        entry.Embeddings.Add(vector);
+        entry.References.Add(new ReferenceImageInfo
+        {
+            Index = index,
+            File = $"images/{species.Id}/{index}.jpg",
+            GbifId = occurrence.Key,
+            SourceUrl = media.Identifier,
+            OccurrenceUrl = $"https://www.gbif.org/occurrence/{occurrence.Key}",
+            License = media.License,
+            Creator = media.Creator ?? occurrence.RightsHolder,
+            RightsHolder = media.RightsHolder ?? occurrence.RightsHolder,
+            Dataset = occurrence.DatasetName
+        });
+
+        log($"    embedding {embedMs:0} ms");
+        return true;
     }
 
     // Hash de cada imagem que a espécie já tem, para não aceitar a mesma foto de novo com outra URL.
