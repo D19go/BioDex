@@ -127,7 +127,7 @@ public sealed class PackBuildForegroundService : Service
                 // que salva o checkpoint antes de sair (ver AppPackBuilder.BuildToFileAsync).
                 var remaining = RunBudget - (DateTime.UtcNow - runStartedUtc);
                 if (remaining <= TimeSpan.Zero)
-                    throw new OperationCanceledException("limite de tempo da execução");
+                    throw new System.OperationCanceledException("limite de tempo da execução");
                 using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
                 limit.CancelAfter(remaining);
                 var roundToken = limit.Token;
@@ -198,7 +198,7 @@ public sealed class PackBuildForegroundService : Service
             });
             journal.Log($"Pack \"{lastPack.Manifest.PackName}\" pronto com {lastPack.Entries.Count} espécies e ativado.");
         }
-        catch (OperationCanceledException)
+        catch (System.OperationCanceledException)
         {
             if (token.IsCancellationRequested)
             {
