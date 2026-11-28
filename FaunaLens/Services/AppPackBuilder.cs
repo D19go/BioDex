@@ -265,6 +265,9 @@ public sealed class AppPackBuilder
     // do GBIF e viraram miniatura. Hash, nome do arquivo e embedding continuam em ordem: são estado da espécie.
     const int DownloadWindow = 8;
 
+    // Se o modelo falhar nesta quantidade de fotos seguidas, a criação para: senão roda horas sem gerar nada.
+    const int MaxConsecutiveEmbeddingFailures = 8;
+
     // Imagem já baixada, esperando ser processada na ordem de prioridade.
     sealed record FetchedImage(GbifOccurrence Occurrence, GbifMedia Media, int Limit, byte[] Thumbnail, int RawKilobytes, double Seconds, Exception? Error);
 
@@ -374,6 +377,7 @@ public sealed class AppPackBuilder
         }
 
         var added = 0;
+        var consecutiveFailures = 0;
         Refill();
         while (added < wanted && inFlight.Count > 0)
         {
@@ -393,11 +397,13 @@ public sealed class AppPackBuilder
             {
                 if (fetched.Error is not null)
                 {
+                    // Falha de rede do GBIF: não diz nada sobre o modelo.
                     log($"  imagem ignorada: {fetched.Error.Message}");
                 }
                 else if (await TryAcceptAsync(fetched, entry, folder, usedHashes, ct))
                 {
                     added++;
+                    consecutiveFailures = 0;
                     takenPerOccurrence[key] = takenPerOccurrence.GetValueOrDefault(key) + 1;
                     log($"  imagem {entry.References.Count} pronta ({added}/{wanted} nesta rodada)");
                 }
@@ -408,7 +414,14 @@ public sealed class AppPackBuilder
             }
             catch (Exception ex)
             {
+                // Falha ao processar a foto (miniatura, hash, embedding): conta para parar a tempo se o modelo quebrou.
+                consecutiveFailures++;
                 log($"  imagem ignorada: {ex.Message}");
+                if (consecutiveFailures >= MaxConsecutiveEmbeddingFailures)
+                    throw new InvalidOperationException(
+                        "O BioCLIP não conseguiu processar as fotos, então a criação foi interrompida. " +
+                        $"Erro: {ex.Message}",
+                        ex);
             }
 
             // Fora do try acima: uma falha no salvamento não vira "imagem ignorada".
