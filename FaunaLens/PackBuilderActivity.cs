@@ -277,13 +277,6 @@ public sealed class PackBuilderActivity : Activity
             return;
         }
 
-        if (!ModelStorage.HasAccess(this))
-        {
-            ShowMessage("Libere o acesso a arquivos para usar o BioCLIP em Download/BioDex/Biodex_Models.");
-            ModelStorage.RequestAccess(this);
-            return;
-        }
-
         if (!File.Exists(FileSystem.ModelPath))
         {
             ShowMessage("O BioCLIP ainda não está instalado. Baixe-o na tela principal primeiro.");

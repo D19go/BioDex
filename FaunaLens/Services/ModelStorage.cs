@@ -1,11 +1,11 @@
 using Android.App;
 using Android.Content;
-using Android.Media;
 using Android.OS;
 
 namespace FaunaLens.Services;
 
-// Acesso à pasta Download/BioDex (Android 11+ exige "acesso a todos os arquivos").
+// Acesso a Download/BioDex. Modelo e packs ficam no armazenamento privado do app; esta pasta só é usada
+// pelo placar compartilhado entre clones e para trazer arquivos de versões anteriores.
 public static class ModelStorage
 {
     public const int StorageRequest = 4107;
@@ -34,7 +34,7 @@ public static class ModelStorage
             == Android.Content.PM.Permission.Granted;
     }
 
-    // Abre a tela do sistema onde o usuário libera o acesso. Depois de voltar, toque no botão de novo.
+    // Abre a tela do sistema onde o usuário libera o acesso. Só é chamado quando a função precisa dele.
     public static void RequestAccess(Activity activity)
     {
         if (Build.VERSION.SdkInt >= BuildVersionCodes.R)
@@ -54,57 +54,50 @@ public static class ModelStorage
             StorageRequest);
     }
 
-    // Traz modelo e packs de versões anteriores para Download/BioDex. Só roda com acesso liberado.
-    // Falhas são ignoradas: o que não migrou continua na pasta antiga.
-    public static void MigrateLegacyFolders()
+    // Traz modelo e packs de versões anteriores para o armazenamento privado.
+    // Cópia e depois remoção da origem; o que falhar fica onde estava e tenta de novo na próxima abertura.
+    public static void MigrateToPrivateStorage()
     {
-        if (!HasAccess(Android.App.Application.Context))
+        // Download/BioDex só pode ser lido com acesso liberado. Sem acesso, a migração espera.
+        if (HasAccess(Android.App.Application.Context))
+        {
+            Try(() => MoveFileIfNeeded(FileSystem.PublicModelPath, FileSystem.ModelPath));
+            Try(() => MoveFileIfNeeded(FileSystem.PublicModelTempPath, FileSystem.ModelTempPath));
+            Try(() => MoveFileIfNeeded(FileSystem.LegacyPublicModelPath, FileSystem.ModelPath));
+            Try(() => MoveDirectories(FileSystem.PublicPackDirectory, FileSystem.PackDirectory));
+        }
+
+        Try(() => MoveFileIfNeeded(FileSystem.LegacyModelPath, FileSystem.ModelPath));
+        Try(() => MoveFileIfNeeded(FileSystem.LegacyModelTempPath, FileSystem.ModelTempPath));
+        Try(() => MoveDirectories(FileSystem.LegacyPackDirectory, FileSystem.PackDirectory));
+    }
+
+    // Copia o arquivo de origem para um temporário no destino, troca pelo final e só então apaga a origem.
+    // Se o destino já existe, a origem não é tocada (o que já foi migrado vale).
+    static void MoveFileIfNeeded(string sourcePath, string targetPath)
+    {
+        if (!ModelLocation.ShouldMigrateLegacy(File.Exists(sourcePath), File.Exists(targetPath)))
             return;
 
-        Try(HideFromGallery);
-        MigrateLegacyModels();
-        MigrateLegacyPacks();
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        var copying = targetPath + ".copying";
+        File.Copy(sourcePath, copying, true);
+        File.Move(copying, targetPath, true);
+        File.Delete(sourcePath);
     }
 
-    // As imagens de referência dos packs ficam em Download/BioDex. Sem ".nomedia", a galeria indexa todas elas.
-    // O marcador vale para a pasta e as subpastas; o scan faz a galeria esquecer as que já tinha indexado.
-    public static void HideFromGallery()
+    // Cada pack antigo vai para a pasta nova. Pack que já existe no destino não é sobrescrito.
+    static void MoveDirectories(string source, string target)
     {
-        var root = ModelLocation.RootDirectory(PublicDownloadsDirectory);
-        Directory.CreateDirectory(root);
-
-        var marker = Path.Combine(root, ".nomedia");
-        if (!File.Exists(marker))
-            File.WriteAllText(marker, "");
-
-        MediaScannerConnection.ScanFile(Android.App.Application.Context, new[] { root }, null, null);
-    }
-
-    // Move o modelo (e um download parcial) das pastas antigas para Download/BioDex/Biodex_Models.
-    public static void MigrateLegacyModels()
-    {
-        Try(() => MigrateFileIfNeeded(FileSystem.LegacyModelPath, FileSystem.ModelPath));
-        Try(() => MigrateFileIfNeeded(FileSystem.LegacyModelTempPath, FileSystem.ModelTempPath));
-        Try(() => MigrateFileIfNeeded(FileSystem.LegacyPublicModelPath, FileSystem.ModelPath));
-        Try(() => MigrateFileIfNeeded(FileSystem.LegacyPublicModelTempPath, FileSystem.ModelTempPath));
-    }
-
-    // Copia cada pack antigo (pasta privada) para Download/BioDex/FaunaPacks e só então apaga o antigo.
-    // Pack que já existe no destino não é sobrescrito.
-    public static void MigrateLegacyPacks()
-    {
-        var legacy = FileSystem.LegacyPackDirectory;
-        if (!Directory.Exists(legacy))
+        if (!Directory.Exists(source))
             return;
 
-        var target = FileSystem.PackDirectory;
         Directory.CreateDirectory(target);
-
-        foreach (var source in Directory.GetDirectories(legacy))
+        foreach (var directory in Directory.GetDirectories(source))
         {
             Try(() =>
             {
-                var destination = Path.Combine(target, Path.GetFileName(source));
+                var destination = Path.Combine(target, Path.GetFileName(directory));
                 if (Directory.Exists(destination))
                     return;
 
@@ -112,23 +105,11 @@ public static class ModelStorage
                 if (Directory.Exists(copying))
                     Directory.Delete(copying, true);
 
-                CopyDirectory(source, copying);
+                CopyDirectory(directory, copying);
                 Directory.Move(copying, destination);
-                Directory.Delete(source, true);
+                Directory.Delete(directory, true);
             });
         }
-    }
-
-    static void MigrateFileIfNeeded(string legacyPath, string targetPath)
-    {
-        if (!ModelLocation.ShouldMigrateLegacy(File.Exists(legacyPath), File.Exists(targetPath)))
-            return;
-
-        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-        var copying = targetPath + ".copying";
-        File.Copy(legacyPath, copying, true);
-        File.Move(copying, targetPath, true);
-        File.Delete(legacyPath);
     }
 
     static void CopyDirectory(string source, string target)
@@ -148,7 +129,7 @@ public static class ModelStorage
         }
         catch
         {
-            // Migração é best-effort: o item fica na pasta antiga e tenta de novo na próxima vez.
+            // Migração é best-effort.
         }
     }
 }

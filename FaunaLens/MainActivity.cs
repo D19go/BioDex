@@ -25,6 +25,7 @@ public sealed class MainActivity : Activity
     const int PackRequest = 4105;
     const int NotificationPermissionRequest = 4106;
     const int ManagePacksRequest = 4107;
+    const int FirstRunLocationRequest = 4311;
     public static bool OpenIdentifyOnResume;
     static readonly TimeSpan RegionCheckInterval = TimeSpan.FromMinutes(10);
 
@@ -82,62 +83,33 @@ public sealed class MainActivity : Activity
         _ = StartupAsync();
     }
 
-    // Primeira abertura: pergunta se pode baixar a IA e criar o pack da região (50 espécies, 50 fotos cada).
-    // "Sim" liga a criação automática por região e segue para as permissões; a IA baixa quando houver acesso a arquivos.
+    // Primeira abertura: explica por que a localização é pedida e só então a solicita (e só se o usuário aceitar).
+    // A localização serve para escolher o pack da região; não é guardada nem enviada.
     void ShowFirstRunSetupDialog()
     {
         new AlertDialog.Builder(this)
-            .SetTitle("Preparar o Biodex")
-            .SetMessage("Quer baixar agora a IA offline (BioCLIP, cerca de 170 MB) e criar o FaunaPack da sua região, "
-                + "com 50 espécies e 50 fotos por espécie?\n\n"
-                + "A criação pode levar muitas horas. Use Wi-Fi e deixe o aparelho carregando.")
-            .SetPositiveButton("Sim, preparar", (_, _) =>
+            .SetTitle("Bem-vindo ao Biodex")
+            .SetMessage("A identificação funciona offline: a IA já vem dentro do app.\n\n"
+                + "Para escolher o FaunaPack da sua região (50 espécies, 50 fotos por espécie), o Biodex pode usar sua "
+                + "localização aproximada, só para descobrir o estado. Ela não é guardada nem enviada.\n\n"
+                + "Você também pode criar o pack depois, em Gerenciar FaunaPacks.")
+            .SetPositiveButton("Usar minha localização", (_, _) =>
             {
-                AppSettings.SetAutoRegionEnabled(true);
-                AppSettings.SetFirstRunStage(AppSettings.FirstRunWaitingAccess);
-                AskFirstRunPermissions();
+                FirstRunPermissions.MarkDone(this);
+                if (LocationRegionDetector.HasPermission(this))
+                {
+                    _ = StartFirstRunPackAsync();
+                    return;
+                }
+
+                RequestPermissions(new[] { LocationRegionDetector.CoarseLocationPermission }, FirstRunLocationRequest);
             })
-            .SetNegativeButton("Agora não", (_, _) => AskFirstRunPermissions())
+            .SetNegativeButton("Agora não", (_, _) => FirstRunPermissions.MarkDone(this))
             .SetCancelable(false)
             .Show();
     }
 
-    // Primeira abertura: pede de uma vez as permissões que faltam e, em seguida, o acesso a todos os arquivos.
-    void AskFirstRunPermissions()
-    {
-        var missing = FirstRunPermissions.MissingRuntimePermissions(this);
-        if (missing.Length > 0)
-        {
-            RequestPermissions(missing, FirstRunPermissions.RequestCode);
-            return;
-        }
-
-        AskAllFilesAccessOnFirstRun();
-    }
-
-    void AskAllFilesAccessOnFirstRun()
-    {
-        FirstRunPermissions.MarkDone(this);
-        if (!ModelStorage.HasAccess(this))
-        {
-            ModelStorage.RequestAccess(this);
-            return;
-        }
-
-        ContinueFirstRunSetup();
-    }
-
-    // Com o acesso liberado, inicia o download da IA escolhido na primeira abertura.
-    void ContinueFirstRunSetup()
-    {
-        if (AppSettings.GetFirstRunStage() != AppSettings.FirstRunWaitingAccess || !ModelStorage.HasAccess(this))
-            return;
-
-        AppSettings.SetFirstRunStage(AppSettings.FirstRunDownloading);
-        _ = DownloadModelAsync();
-    }
-
-    // Quando o modelo termina de baixar, cria o pack da região detectada. Roda uma vez só.
+    // Depois que o usuário aceita a localização: escolhe o estado e cria o pack da região.
     async Task StartFirstRunPackAsync()
     {
         string? region = null;
@@ -146,12 +118,30 @@ public sealed class MainActivity : Activity
 
         if (region is null)
         {
-            result!.Text = "A IA foi baixada, mas não consegui identificar sua região. Crie o FaunaPack da sua região em Gerenciar FaunaPacks.";
+            result!.Text = "Não consegui identificar sua região. Crie o FaunaPack da sua região em Gerenciar FaunaPacks.";
             return;
         }
 
+        AppSettings.SetAutoRegionEnabled(true);
         AppSettings.SetRegionState(new RegionState(region));
         StartRegionBuild(region);
+    }
+
+    // Modelo embutido no APK: na primeira abertura é copiado para o armazenamento privado (uma vez só).
+    async Task EnsureBundledModelAsync()
+    {
+        if (File.Exists(FileSystem.ModelPath) || !EmbeddedModel.IsBundled(this))
+            return;
+
+        status!.Text = "Preparando a IA offline pela primeira vez...";
+        try
+        {
+            await Task.Run(() => EmbeddedModel.CopyToPrivateStorage(this));
+        }
+        catch (Exception ex)
+        {
+            result!.Text = "Não consegui preparar a IA offline: " + ex.Message;
+        }
     }
 
     async Task StartupAsync()
@@ -159,6 +149,7 @@ public sealed class MainActivity : Activity
         status!.Text = "Carregando catálogo de espécies...";
         await LoadCatalogOrInstalledPackAsync();
         RecoverBackgroundDownload();
+        await EnsureBundledModelAsync();
         await InitializeEngineAsync();
         StartDownloadPolling();
         startupFinished = true;
@@ -177,7 +168,6 @@ public sealed class MainActivity : Activity
             OpenIdentifyOnResume = false;
             SetIdentifyOpen(true);
         }
-        ContinueFirstRunSetup();
         RefreshDownloadState();
         StartDownloadPolling();
         CheckPackBuildResult();
@@ -283,13 +273,6 @@ public sealed class MainActivity : Activity
         }
 
         downloadModelButton!.Enabled = true;
-
-        // Download da configuração inicial concluído: o arquivo final existe, então cria o pack da região.
-        if (AppSettings.GetFirstRunStage() == AppSettings.FirstRunDownloading && File.Exists(FileSystem.ModelPath))
-        {
-            AppSettings.SetFirstRunStage(AppSettings.FirstRunIdle);
-            _ = StartFirstRunPackAsync();
-        }
 
         // O download terminou em segundo plano: carrega o modelo sem exigir reiniciar o app.
         if (engine?.IsReady != true && !engineLoading && !engineLoadFailed && File.Exists(FileSystem.ModelPath)
@@ -846,8 +829,8 @@ public sealed class MainActivity : Activity
     {
         try
         {
-            // Packs e modelo de versões antigas passam para Download/BioDex (só quando há acesso).
-            await Task.Run(ModelStorage.MigrateLegacyFolders);
+            // Modelo e packs de versões antigas passam para o armazenamento privado do app.
+            await Task.Run(ModelStorage.MigrateToPrivateStorage);
 
             // Sem FaunaPack marcado, o app começa vazio: não há demonstração embutida no APK.
             var packs = await packManager.LoadEnabledAsync();
@@ -901,9 +884,12 @@ public sealed class MainActivity : Activity
     public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
     {
         base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == FirstRunPermissions.RequestCode)
+        if (requestCode == FirstRunLocationRequest)
         {
-            AskAllFilesAccessOnFirstRun();
+            if (grantResults.Length > 0 && grantResults[0] == Permission.Granted)
+                _ = StartFirstRunPackAsync();
+            else
+                result!.Text = "Sem localização, você pode criar o FaunaPack da sua região em Gerenciar FaunaPacks.";
             return;
         }
 
@@ -918,15 +904,6 @@ public sealed class MainActivity : Activity
             result!.Text = "BioCLIP offline já está instalado.";
             return;
         }
-
-        if (!ModelStorage.HasAccess(this))
-        {
-            status!.Text = "Libere o acesso a arquivos para salvar o BioCLIP em Download/BioDex/Biodex_Models. Depois toque em \"Baixar BioCLIP offline\" de novo.";
-            ModelStorage.RequestAccess(this);
-            return;
-        }
-
-        await Task.Run(ModelStorage.MigrateLegacyModels);
 
         var state = BioClipDownloadState.Load();
         if (state.Status is "downloading" or "resuming")
@@ -1022,13 +999,7 @@ public sealed class MainActivity : Activity
 
     void PickModel()
     {
-        if (!ModelStorage.HasAccess(this))
-        {
-            status!.Text = "Libere o acesso a arquivos para importar o modelo em Download/BioDex/Biodex_Models.";
-            ModelStorage.RequestAccess(this);
-            return;
-        }
-
+        // Seletor do sistema: não precisa de acesso a todos os arquivos.
         var intent = new Intent(Intent.ActionOpenDocument);
         intent.AddCategory(Intent.CategoryOpenable);
         intent.SetType("application/octet-stream");
@@ -1152,7 +1123,7 @@ public sealed class MainActivity : Activity
 
             var installedRegions = (await packManager.ListAsync()).Select(pack => pack.Region).ToList();
             var buildActive = PackBuildStateStore.Load(FileSystem.PackBuildStatePath).IsActive(DateTime.UtcNow);
-            var modelReady = File.Exists(FileSystem.ModelPath) && ModelStorage.HasAccess(this);
+            var modelReady = File.Exists(FileSystem.ModelPath);
 
             var plan = RegionPackPlanner.Plan(AppSettings.GetRegionState(), detected, installedRegions, buildActive, modelReady);
             AppSettings.SetRegionState(plan.Next);

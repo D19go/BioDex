@@ -1,8 +1,8 @@
 namespace FaunaLens.Services;
 
 // Lógica de caminhos do BioDex, sem dependências do Android para poder ser testada no CI.
-// Tudo fica em Download/BioDex: Biodex_Models (modelo BioCLIP) e FaunaPacks (packs instalados).
-// Todos os apps BioDex (inclusive clones) usam essas mesmas pastas.
+// Caminhos das pastas antigas em Download/BioDex (Biodex_Models e FaunaPacks). O app não usa mais essas pastas:
+// modelo e packs ficam no armazenamento privado (ver FileSystem); estes caminhos servem para migrar os arquivos.
 public static class ModelLocation
 {
     public const string RootFolderName = "BioDex";

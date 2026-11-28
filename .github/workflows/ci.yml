@@ -49,6 +49,13 @@ jobs:
           mkdir -p FaunaLens.OnnxAndroid/libs
           curl -fsSL -o FaunaLens.OnnxAndroid/libs/onnxruntime-android-1.22.0.aar \
             https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.22.0/onnxruntime-android-1.22.0.aar
+      - name: Baixar o BioCLIP para embutir no APK
+        # O modelo (cerca de 170 MB) não é versionado no git. Vai para a pasta Assets, que o build embute no APK.
+        run: |
+          mkdir -p FaunaLens/Assets
+          curl -fsSL --retry 3 -o FaunaLens/Assets/bioclip_image.onnx \
+            "https://huggingface.co/m3r1al/naturalist-bioclip-v1/resolve/main/image_encoder.onnx?download=true"
+          ls -lh FaunaLens/Assets/bioclip_image.onnx
       - name: Compilar o APK
         run: |
           ARGS=()
@@ -77,6 +84,13 @@ jobs:
             unzip -l "out/$NAME" | grep "libonnxruntime.so"
           else
             echo "::warning::libonnxruntime.so NÃO está no APK $NAME; a identificação offline vai falhar no celular."
+          fi
+          # O modelo embutido aparece como assets/bioclip_image.onnx. Sem ele, o app baixa a IA na primeira abertura.
+          if unzip -l "out/$NAME" | grep -q "assets/bioclip_image.onnx"; then
+            echo "Modelo BioCLIP embutido no APK:"
+            unzip -l "out/$NAME" | grep "assets/bioclip_image.onnx"
+          else
+            echo "::warning::O modelo BioCLIP NÃO está no APK $NAME (o app vai precisar baixá-lo)."
           fi
       - uses: actions/upload-artifact@v4
         with:
