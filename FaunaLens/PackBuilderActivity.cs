@@ -175,7 +175,7 @@ public sealed class PackBuilderActivity : Activity
         pagesSpinner.ItemSelected += (_, _) => UpdateEstimate();
         UpdateEstimate();
 
-        allowBySa = new CheckBox(this) { Text = "Aceitar CC BY-SA", Checked = settings?.AllowBySa ?? true };
+        allowBySa = new CheckBox(this) { Text = "Aceitar CC BY-SA", Checked = settings?.AllowBySa ?? false };
         content.AddView(allowBySa);
 
         buildButton = new Button(this) { Text = target is null ? "Criar FaunaPack" : "Atualizar FaunaPack" };

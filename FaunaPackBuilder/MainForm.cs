@@ -73,7 +73,7 @@ public sealed class MainForm : Form
         AddNumeric(options, "Páginas GBIF:", searchPages, 1, 30, 10, 55);
         allowBySa.Text = "Aceitar CC BY-SA";
         allowBySa.AutoSize = true;
-        allowBySa.Checked = true;
+        allowBySa.Checked = false; // CC BY-SA exige compartilhar igual; fica desligado por padrão
         options.Controls.Add(allowBySa);
         keepCache.Text = "Manter cache";
         keepCache.AutoSize = true;

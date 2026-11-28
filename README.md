@@ -96,7 +96,7 @@ Hoje o escopo é o **Rio Grande do Sul, Brasil** (bioma Pampa). O APK não traz 
 
 - Modelo: [BioCLIP](https://huggingface.co/imageomics/bioclip), com os pesos de [m3r1al/naturalist-bioclip-v1](https://huggingface.co/m3r1al/naturalist-bioclip-v1). Confirme a licença do modelo na página dele antes de distribuir o app comercialmente.
 - Runtime de inferência: [ONNX Runtime](https://onnxruntime.ai) (licença MIT).
-- Dados de ocorrência e imagens de referência: [GBIF](https://www.gbif.org). Cada imagem tem a licença do autor (CC0, CC BY, CC BY-NC ou CC BY-SA), que exige atribuição e pode limitar o uso comercial ou exigir a mesma licença em obras derivadas. Os packs guardam essas informações.
+- Dados de ocorrência e imagens de referência: [GBIF](https://www.gbif.org). Os packs criados pelo app usam só imagens **CC0** e **CC BY**, que exigem atribuição (a opção CC BY-SA vem desligada). Cada imagem guarda o nome do autor e a licença.
 - **Licença do código:** todos os direitos reservados. Veja o arquivo [LICENSE](LICENSE).
 
 ## Contato
@@ -205,7 +205,7 @@ Today the scope is the **state of Rio Grande do Sul, Brazil** (Pampa biome). The
 
 - Model: [BioCLIP](https://huggingface.co/imageomics/bioclip), with weights from [m3r1al/naturalist-bioclip-v1](https://huggingface.co/m3r1al/naturalist-bioclip-v1). Check the model's license on its page before distributing the app commercially.
 - Inference runtime: [ONNX Runtime](https://onnxruntime.ai) (MIT license).
-- Occurrence data and reference images: [GBIF](https://www.gbif.org). Each image carries its author's license (CC0, CC BY, CC BY-NC or CC BY-SA), which requires attribution and may limit commercial use or require the same license for derived works. Packs keep this information.
+- Occurrence data and reference images: [GBIF](https://www.gbif.org). Packs created by the app use only **CC0** and **CC BY** images, which require attribution (the CC BY-SA option is off by default). Each image keeps its author and license.
 - **Code license:** all rights reserved. See the [LICENSE](LICENSE) file.
 
 ## Contact

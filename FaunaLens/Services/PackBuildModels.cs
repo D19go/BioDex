@@ -17,7 +17,8 @@ public sealed class PackBuildOptions
     public int MaxSpecies { get; set; } = 50;
     public int ImagesPerSpecies { get; set; } = 2;
     public int SearchPages { get; set; } = 10;
-    public bool AllowBySa { get; set; } = true;
+    // Desligado por padrão: packs só com CC0 e CC BY, para poderem ser distribuídos sem a obrigação de compartilhar igual.
+    public bool AllowBySa { get; set; } = false;
     public string? UpdatePackId { get; set; }
 
     // Mantém os valores dentro dos limites suportados, mesmo que a tela envie algo fora deles.
